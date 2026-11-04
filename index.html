@@ -124,13 +124,12 @@ footer { grid-column: 1 / -1; color: var(--dim); font-size: 12px; }
 </div></header>
 
 <main class="wrap">
-  <p class="lead">Switch a LilyGO T-Beam S3 Supreme between the C factory firmware and MicroPython, or build MicroPython with a TensorFlow Lite model. Runs in the browser over Web Serial.</p>
+  <p class="lead">Switch a LilyGO T-Beam S3 Supreme between the C factory firmware and MicroPython, or drop in your own firmware file. Runs in the browser over Web Serial.</p>
   <div class="banner" id="nosupport">Web Serial is not available in this browser. Use Chrome, Edge or Opera on desktop, over HTTPS or localhost.</div>
 
   <div>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" id="tab-fw" aria-selected="true" aria-controls="panel-fw">Firmware</button>
-      <button class="tab" role="tab" id="tab-tf" aria-selected="false" aria-controls="panel-tf">TensorFlow build</button>
       <button class="tab" role="tab" id="tab-repl" aria-selected="false" aria-controls="panel-repl">MicroPython REPL</button>
     </div>
 
@@ -205,46 +204,6 @@ print(machine.freq())</textarea>
           <button id="repl-save" disabled>Save as main.py</button>
         </div>
         <p class="note" style="margin:0">Run uses paste mode, so multi-line code works. Save writes the editor text to <code>main.py</code>, which runs at boot.</p>
-      </div>
-    </div>
-
-    <div id="panel-tf" role="tabpanel" aria-labelledby="tab-tf" hidden>
-      <div class="card">
-        <h2>MicroPython with TensorFlow Lite</h2>
-    <p class="note">MicroPython plus TensorFlow Lite for Microcontrollers (<code>microlite</code>), with a <code>.tflite</code> model frozen into
-      flash as the module <code>tflm_model</code>. It is compiled by a GitHub Actions job in this repo, not in your browser.
-      Keep models small: the frozen copy sits in flash and is copied to RAM at <code>tflm_model.load()</code>.</p>
-    <div class="targets">
-      <div class="target">
-        <h3>Flash a finished build</h3>
-        <label class="f">Build
-          <select id="cust"></select>
-        </label>
-        <p id="custinfo">loading builds...</p>
-        <button class="primary" id="go-cust" disabled>Flash custom build</button>
-      </div>
-      <div class="target">
-        <h3>Build with your model</h3>
-        <label class="f">Model file (.tflite, up to 48 KB, or leave empty for the sine demo)
-          <input type="file" id="cmodelfile" accept=".tflite">
-        </label>
-        <p id="modelinfo"></p>
-        <label class="f">Board
-          <select id="cboard">
-            <option value="MICROLITE_S3">ESP32-S3, no PSRAM (works on every board)</option>
-            <option value="MICROLITE_S3_SPIRAM">ESP32-S3, quad PSRAM</option>
-            <option value="MICROLITE_S3_SPIRAM_OCTAL">ESP32-S3, octal PSRAM</option>
-          </select>
-        </label>
-        <label class="f">GitHub token
-          <input type="password" id="ctoken" autocomplete="off" placeholder="paste once per visit">
-        </label>
-        <p><a id="tokenlink" target="_blank" rel="noopener">Create a token</a> (only lets this page start builds in this repo; it is never stored).
-          The uploaded model becomes public in the build log.</p>
-        <button class="primary" id="go-build">Build firmware</button>
-        <div class="status"><span class="dot" id="bdot"></span><span id="buildinfo">Builds take 30 to 60 minutes. You can leave this page open.</span></div>
-      </div>
-    </div>
       </div>
     </div>
 
@@ -414,111 +373,8 @@ function confirmDialog(title, body) {
 }
 
 function setBusy(b) {
-  for (const id of ["go-mp", "go-c", "idf", "mp", "cimg", "baud", "erase", "cfile", "go-cust", "cust", "go-file", "dropaddr"]) $(id).disabled = b || ((id === "go-cust" || id === "cust") && !customBuilds.length) || (id === "go-file" && !dropped);
+  for (const id of ["go-mp", "go-c", "idf", "mp", "cimg", "baud", "erase", "cfile", "go-file", "dropaddr"]) $(id).disabled = b || (id === "go-file" && !dropped);
 }
-
-// ---- custom builds (GitHub Releases of this repo) ----
-const REPO = "AndrewDemsDS/epl428-tbeam-flasher";
-let customBuilds = [];
-
-async function loadCustomBuilds() {
-  try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const rels = await res.json();
-    customBuilds = [];
-    for (const r of rels.filter((x) => /^custom-/.test(x.tag_name))) {
-      const info = r.assets.find((a) => a.name === "build-info.json");
-      if (!info) continue;
-      try {
-        const meta = await (await fetch(info.browser_download_url)).json();
-        const bin = r.assets.find((a) => a.name === meta.file);
-        if (bin) customBuilds.push({ meta, url: bin.browser_download_url, api: bin.url, date: r.published_at.slice(0, 10) });
-      } catch { /* skip releases whose metadata cannot be read */ }
-    }
-  } catch (e) {
-    $("custinfo").textContent = "could not read releases: " + e.message;
-    return;
-  }
-  fillSelect($("cust"), customBuilds.map((b, i) => [String(i), `${b.meta.tag} ${b.meta.board} (${b.date})`]));
-  $("go-cust").disabled = $("cust").disabled = !customBuilds.length;
-  renderCustInfo();
-}
-function renderCustInfo() {
-  const b = customBuilds[Number($("cust").value)];
-  $("custinfo").textContent = b
-    ? `MicroPython ${b.meta.micropython || "?"}, ESP-IDF ${b.meta.idf || "?"}, model ${b.meta.model} (${b.meta.model_size} B), ${(b.meta.size / 1048576).toFixed(2)} MiB`
-    : "no custom builds yet. Start one on the right.";
-}
-$("cust").addEventListener("change", renderCustInfo);
-
-const gh = (path, opts = {}, token) => fetch(`https://api.github.com/repos/${REPO}/${path}`, {
-  ...opts,
-  headers: { Accept: "application/vnd.github+json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opts.headers || {}) },
-});
-function setBuild(text, kind = "") { $("buildinfo").textContent = text; $("bdot").className = "dot " + kind; }
-
-$("tokenlink").href = "https://github.com/settings/personal-access-tokens/new?" + new URLSearchParams({
-  name: "tbeam-flasher-build", description: "Start firmware builds from the T-Beam flasher page",
-  target_name: "AndrewDemsDS", expires_in: "30", actions: "write", metadata: "read",
-}).toString();
-
-let modelB64 = "";
-function b64(bytes) { let s = ""; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); }
-$("cmodelfile").addEventListener("change", async () => {
-  modelB64 = "";
-  const f = $("cmodelfile").files[0];
-  if (!f) { $("modelinfo").textContent = ""; return; }
-  const bytes = new Uint8Array(await f.arrayBuffer());
-  const magic = String.fromCharCode(...bytes.slice(4, 8));
-  if (magic !== "TFL3") { $("modelinfo").textContent = "That is not a TFLite model (missing the TFL3 header)."; return; }
-  if (bytes.length > 48000) { $("modelinfo").textContent = `${bytes.length} bytes is too big for the upload route (48000 max). Commit it to models/ in the repo instead.`; return; }
-  modelB64 = b64(bytes);
-  $("modelinfo").textContent = `OK: ${f.name}, ${bytes.length} bytes.`;
-});
-
-async function startBuild() {
-  const token = $("ctoken").value.trim();
-  if (!token) { setBuild("Paste a token first (link below the field).", "err"); return; }
-  if ($("cmodelfile").files[0] && !modelB64) { setBuild("Fix the model file first.", "err"); return; }
-  const inputs = { board: $("cboard").value };
-  if (modelB64) inputs.model_b64 = modelB64;
-  $("go-build").disabled = true;
-  try {
-    const started = Date.now();
-    const res = await gh("actions/workflows/build-custom.yml/dispatches",
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ref: "main", inputs }) }, token);
-    if (res.status !== 204) { setBuild(`GitHub refused the request (HTTP ${res.status}). Check the token has Actions: write on this repo.`, "err"); return; }
-    setBuild("Build queued.", "busy");
-    await watchBuild(token, started);
-  } catch (e) { setBuild("Request failed: " + e.message, "err"); }
-  finally { $("go-build").disabled = false; $("ctoken").value = ""; }
-}
-
-async function watchBuild(token, since) {
-  let run = null;
-  for (let i = 0; i < 400; i++) {            // about 2 hours at 20 s
-    await new Promise((r) => setTimeout(r, 20000));
-    const res = await gh("actions/workflows/build-custom.yml/runs?event=workflow_dispatch&per_page=5", {}, token);
-    if (!res.ok) continue;
-    run = (await res.json()).workflow_runs.find((r) => Date.parse(r.created_at) >= since - 60000);
-    if (!run) { setBuild("Waiting for the build to start...", "busy"); continue; }
-    if (run.status !== "completed") {
-      const mins = Math.round((Date.now() - Date.parse(run.created_at)) / 60000);
-      setBuild(`Building (${run.status}, ${mins} min). Log: ${run.html_url}`, "busy");
-      continue;
-    }
-    if (run.conclusion === "success") {
-      setBuild("Build finished. It is selected on the left.", "ok");
-      customBuilds = []; await loadCustomBuilds();
-      if (customBuilds.length) $("cust").value = "0";
-      renderCustInfo();
-    } else setBuild(`Build ${run.conclusion}. See ${run.html_url}`, "err");
-    return;
-  }
-  setBuild("Still running after 2 hours. Check the Actions tab.", "err");
-}
-$("go-build").addEventListener("click", startBuild);
 
 let dropped = null; // { name, data, ok }
 function hex(n) { return "0x" + n.toString(16); }
@@ -565,17 +421,6 @@ async function loadImage(kind) {
     log(`using ${dropped.name} at ${hex(address)}, sha256 ${(await sha256hex(dropped.data)).slice(0, 16)}...`);
     return { data: dropped.data, address, label: dropped.name };
   }
-  if (kind === "cust") {
-    const b = customBuilds[Number($("cust").value)];
-    log(`fetching ${b.meta.file}`);
-    let res = await fetch(b.url).catch(() => null);
-    if (!res || !res.ok) res = await fetch(b.api, { headers: { Accept: "application/octet-stream" } });
-    if (!res.ok) throw new Error(`download failed (HTTP ${res.status})`);
-    const buf = new Uint8Array(await res.arrayBuffer());
-    if (buf.length !== b.meta.size || (await sha256hex(buf)) !== b.meta.sha256) throw new Error("custom image failed its sha256 check");
-    log(`sha256 ok (${buf.length} bytes)`, "o");
-    return { data: buf, address: b.meta.address, label: `custom ${b.meta.tag}` };
-  }
   if (kind === "mp") {
     const e = selectedMp();
     log(`fetching ${e.file}`);
@@ -602,7 +447,6 @@ async function run(kind) {
   let image;
   try {
     const target = kind === "mp" ? `MicroPython v${selectedMp().version}`
-      : kind === "cust" ? `custom build ${customBuilds[Number($("cust").value)].meta.tag}`
       : kind === "file" ? `your file ${dropped?.name ?? ""}` : "the C factory image";
     const ok = await confirmDialog(`Flash ${target}?`,
       ($("erase").checked ? "The whole flash is erased first, including any files on the board. " : "") +
@@ -644,7 +488,6 @@ async function run(kind) {
     await loader.after("hard_reset");
     setState("done. replug USB if the port does not return", "ok");
     log(kind === "mp" ? "MicroPython is running. Open it with Thonny or: mpremote repl"
-      : kind === "cust" ? "Custom firmware is running. In the REPL: import microlite, tflm_model"
       : kind === "file" ? "Your firmware was written. If it is MicroPython, open it with Thonny or: mpremote repl"
       : "C factory image is running. The screen should show text.", "o");
   } catch (err) {
@@ -658,7 +501,6 @@ async function run(kind) {
 
 $("go-mp").addEventListener("click", () => run("mp"));
 $("go-c").addEventListener("click", () => run("c"));
-$("go-cust").addEventListener("click", () => run("cust"));
 $("go-file").addEventListener("click", () => run("file"));
 // ---- MicroPython REPL over Web Serial ----
 const repl = { port: null, writer: null, reader: null };
@@ -710,7 +552,7 @@ $("repl-run").addEventListener("click", () => pasteMode($("editor").value));
 $("repl-save").addEventListener("click", () =>
   pasteMode(`f = open('main.py', 'w')\nf.write(${JSON.stringify($("editor").value)})\nf.close()\nprint('saved main.py')`));
 
-const TABS = [["tab-fw", "panel-fw"], ["tab-tf", "panel-tf"], ["tab-repl", "panel-repl"]];
+const TABS = [["tab-fw", "panel-fw"], ["tab-repl", "panel-repl"]];
 for (const [tab] of TABS) {
   $(tab).addEventListener("click", () => {
     for (const [t, p] of TABS) { $(t).setAttribute("aria-selected", String(t === tab)); $(p).hidden = t !== tab; }
@@ -719,12 +561,10 @@ for (const [tab] of TABS) {
   });
 }
 if (location.hash === "#repl") $("tab-repl").click();
-else if (location.hash === "#tensorflow") $("tab-tf").click();
-else try { const t = localStorage.getItem("tab"); if (t === "tab-tf" || t === "tab-repl") $(t).click(); } catch {}
+else try { const t = localStorage.getItem("tab"); if (t === "tab-repl") $(t).click(); } catch {}
 { const ok = "serial" in navigator;
   $("ptext").textContent = ok ? "Web Serial ready" : "Web Serial unavailable";
   $("pdot").className = "dot " + (ok ? "ok" : "err"); }
-loadCustomBuilds();
 init().catch((e) => { log("could not load catalog.json: " + e.message, "e"); setState("failed", "err"); });
 </script>
 </body>

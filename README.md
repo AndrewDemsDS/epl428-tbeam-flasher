@@ -23,35 +23,12 @@ other program that holds the port.
 
 Flashing erases the board (the option is on by default). Files stored on a MicroPython board are lost.
 
-## Custom firmware with a TensorFlow Lite model
-
-The page can also flash a custom MicroPython build that includes TensorFlow Lite for Microcontrollers
-(the `microlite` module from [mocleiri/tensorflow-micropython-examples](https://github.com/mocleiri/tensorflow-micropython-examples))
-and a `.tflite` model frozen into flash.
-
-A browser cannot compile firmware, so the build runs in GitHub Actions (`.github/workflows/build-custom.yml`):
-
-1. On the page, choose your `.tflite` file (up to 48 KB, checked in the browser) or leave it empty for the sine demo.
-   Larger models: commit them to `models/` and start the workflow from the Actions tab with the path.
-2. Pick the board variant (no PSRAM works on every board), paste a fine-grained token (the page links to a
-   pre-filled token form: Actions write, this repo only) and press Build. The token is never stored.
-3. The page shows build progress. When it finishes the build is selected for flashing as a `custom-N` release.
-4. On the board: `import microlite, tflm_model`, then `model = tflm_model.load()` and pass `model` to
-   `microlite.interpreter(...)`.
-
-The uploaded model appears in the public build log.
-
-The MicroPython and ESP-IDF versions of a custom build are fixed by the upstream project at the pinned commit,
-so they are older than the official builds above. The release notes list them.
-The model is stored in flash as the frozen module `tflm_model` and copied to RAM only when `load()` runs.
-Built images are kept in Releases, not in the repo.
-
 ## MicroPython REPL
 
 The **MicroPython REPL** tab connects to the board over Web Serial: a terminal (xterm.js), interrupt and soft-reset
 buttons, a code box that runs on the board in paste mode, and a button that saves the code as `main.py`.
 For a full editor with a file manager, use [ViperIDE](https://viper-ide.org).
-Links such as `#repl` and `#tensorflow` open a tab directly.
+The link `#repl` opens that tab directly.
 
 ## What is in the repo
 
@@ -60,8 +37,6 @@ Links such as `#repl` and `#tensorflow` open a tab directly.
 | `index.html` | the whole app, one file, no build step |
 | `catalog.json` | MicroPython builds (version, ESP-IDF version, sha256) and the C image URL |
 | `firmware/` | official `ESP32_GENERIC_S3` MicroPython releases from micropython.org |
-| `models/` | `.tflite` models for custom builds |
-| `.github/workflows/` | the custom firmware build |
 | `vendor/` | [esptool-js](https://github.com/espressif/esptool-js) 0.7.1 (Apache-2.0) and [xterm.js](https://xtermjs.org) 5.5.0 (MIT), with licences |
 
 MicroPython images are checked against their sha256 before writing, and the flash is verified with an
