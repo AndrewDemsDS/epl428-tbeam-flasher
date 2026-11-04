@@ -46,6 +46,11 @@ jobs:
         with:
           path: self
 
+      - name: Use Python 3.10 (ESP-IDF 4.4 needs an older Python)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL || true
