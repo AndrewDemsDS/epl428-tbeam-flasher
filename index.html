@@ -285,7 +285,12 @@ function renderMp() {
 }
 function renderInfo() {
   const e = catalog.micropython.find((x) => x.version === $("mp").value);
-  $("mpinfo").textContent = e ? `built with ESP-IDF ${e.idf}, ${(e.size / 1048576).toFixed(2)} MiB` : "";
+  if (!e) { $("mpinfo").textContent = ""; return; }
+  const same = catalog.micropython.filter((x) => x.idf === e.idf).map((x) => "v" + x.version);
+  $("mpinfo").textContent =
+    `Compatible ESP-IDF: ${e.idf} (this build was made with it; use it if you compile this version yourself). ` +
+    `Same IDF also used by: ${same.filter((v) => v !== "v" + e.version).join(", ") || "no other bundled release"}. ` +
+    `${(e.size / 1048576).toFixed(2)} MiB.`;
 }
 function selectedMp() { return catalog.micropython.find((x) => x.version === $("mp").value); }
 
