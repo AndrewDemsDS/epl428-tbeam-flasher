@@ -7,95 +7,121 @@
 <meta name="description" content="Switch a LilyGO T-Beam S3 Supreme between the C factory firmware and MicroPython from the browser, over Web Serial.">
 <style>
 :root {
-  --bg: #f4f2ec; --panel: #fbfaf6; --fg: #1d1f1c; --dim: #626559; --line: #cfccc0;
-  --accent: #1f6f43; --accent-fg: #fbfaf6; --warn: #9a5b00; --err: #a3281f; --ok: #1f6f43;
-  --log-bg: #ecebe3;
+  --bg: #f6f7f5; --panel: #ffffff; --fg: #1a1d1a; --dim: #5d635c; --line: #dfe2dc; --soft: #f0f2ee;
+  --accent: #17794a; --accent-fg: #ffffff; --warn: #9a5b00; --err: #b3261e; --ok: #17794a;
+  --log-bg: #f0f2ee; --shadow: 0 1px 2px rgba(20,30,20,.06), 0 4px 14px rgba(20,30,20,.05);
+  --mono: "JetBrains Mono", ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #141613; --panel: #1b1d19; --fg: #d9dbd2; --dim: #8b8e82; --line: #34372f;
-    --accent: #6fcf97; --accent-fg: #101210; --warn: #e0a93c; --err: #ff7b6e; --ok: #6fcf97;
-    --log-bg: #101210;
+    --bg: #101310; --panel: #181c18; --fg: #e4e8e2; --dim: #98a094; --line: #2b312b; --soft: #202620;
+    --accent: #5fcf94; --accent-fg: #0c110d; --warn: #e0a93c; --err: #ff8a7d; --ok: #5fcf94;
+    --log-bg: #0e110e; --shadow: none;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #141613; --panel: #1b1d19; --fg: #d9dbd2; --dim: #8b8e82; --line: #34372f;
-  --accent: #6fcf97; --accent-fg: #101210; --warn: #e0a93c; --err: #ff7b6e; --ok: #6fcf97;
-  --log-bg: #101210;
+  --bg: #101310; --panel: #181c18; --fg: #e4e8e2; --dim: #98a094; --line: #2b312b; --soft: #202620;
+  --accent: #5fcf94; --accent-fg: #0c110d; --warn: #e0a93c; --err: #ff8a7d; --ok: #5fcf94;
+  --log-bg: #0e110e; --shadow: none;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { background: var(--bg); }
-body {
-  margin: 0; background: var(--bg); color: var(--fg);
-  font: 14px/1.55 "JetBrains Mono", ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
-}
-main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
-h1 { font-size: 18px; margin: 0 0 4px; font-weight: 700; }
-h1 span { color: var(--dim); font-weight: 400; }
-.sub { color: var(--dim); margin: 0 0 24px; }
-section { border: 1px solid var(--line); background: var(--panel); padding: 16px; margin: 0 0 16px; }
-h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 12px; font-weight: 600; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans); }
+a { color: var(--accent); }
+code { font-family: var(--mono); font-size: 12px; background: var(--soft); padding: 1px 5px; border-radius: 4px; }
+
+.appbar { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+.appbar-in { max-width: 760px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; letter-spacing: -.01em; }
+.logo { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; }
+.logo svg { width: 16px; height: 16px; }
+.tag { font: 500 11px var(--mono); color: var(--dim); background: var(--soft); border-radius: 999px; padding: 2px 8px; }
+.spacer { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+.pill .dot { width: 7px; height: 7px; }
+
+.wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.lead { margin: 0; color: var(--dim); text-align: center; }
+.banner { grid-column: 1 / -1; border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--fg); padding: 10px 14px; border-radius: 10px; display: none; }
+
+.tabs { display: flex; width: 100%; gap: 4px; background: var(--soft); border-radius: 10px; padding: 4px; margin: 0 0 16px; }
+.tab { flex: 1; border: 0; background: transparent; color: var(--dim); font: 600 13px var(--sans); padding: 8px 14px; border-radius: 7px; cursor: pointer; min-height: 0; }
+.tab[aria-selected="true"] { background: var(--panel); color: var(--fg); box-shadow: var(--shadow); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 0 0 16px; box-shadow: var(--shadow); }
+h2 { font-size: 13px; margin: 0 0 12px; font-weight: 700; }
 .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin: 0 0 12px; }
 .row:last-child { margin-bottom: 0; }
-label.f { display: flex; flex-direction: column; gap: 4px; color: var(--dim); font-size: 12px; min-width: 160px; flex: 1 1 160px; }
-.note { color: var(--dim); font-size: 12px; margin: 0 0 12px; }
-input[type=text], input[type=password] {
-  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
-  padding: 6px 8px; border-radius: 0; min-height: 34px; width: 100%;
+label.f { display: flex; flex-direction: column; gap: 5px; color: var(--dim); font-size: 12px; font-weight: 500; min-width: 160px; flex: 1 1 160px; }
+.note { color: var(--dim); font-size: 13px; margin: 0 0 14px; }
+input[type=text], input[type=password], select, input[type=file] {
+  font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  padding: 7px 10px; border-radius: 8px; min-height: 36px; width: 100%;
 }
-select, input[type=file] {
-  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
-  padding: 6px 8px; border-radius: 0; min-height: 34px;
-}
-select:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+select:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button {
-  font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--fg); background: transparent; color: var(--fg);
-  padding: 10px 14px; border-radius: 0; min-height: 40px;
+  font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+  padding: 9px 14px; border-radius: 8px; min-height: 38px;
 }
-button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-button:hover:not(:disabled) { filter: brightness(1.08); }
-button:disabled { opacity: .4; cursor: not-allowed; }
-.targets { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 600px) { .targets { grid-template-columns: 1fr; } }
-.target { border: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+button.primary { min-height: 44px; font-size: 14px; background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button:hover:not(:disabled) { filter: brightness(.96); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+
+.targets { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .targets { grid-template-columns: 1fr; } }
+.target { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--panel); }
 .target > label.f { flex: 0 0 auto; }
 .target h3 { margin: 0; font-size: 14px; }
 .target p { margin: 0; color: var(--dim); font-size: 12px; }
 .target .grow { flex: 1; }
 .arrow { color: var(--accent); }
-.check { display: flex; gap: 8px; align-items: center; color: var(--fg); font-size: 13px; }
-.check input { accent-color: var(--accent); width: 16px; height: 16px; }
-.status { display: flex; gap: 8px; align-items: center; min-height: 22px; }
-.dot { flex: none; width: 8px; height: 8px; background: var(--dim); display: inline-block; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; min-height: 0; }
+
+.status { display: flex; gap: 8px; align-items: flex-start; min-height: 22px; font-size: 13px; }
+.dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--dim); display: inline-block; }
 .dot.ok { background: var(--ok); } .dot.busy { background: var(--warn); } .dot.err { background: var(--err); }
-progress { width: 100%; height: 10px; accent-color: var(--accent); }
+progress { appearance: none; -webkit-appearance: none; width: 100%; height: 8px; border: 0; border-radius: 4px; margin: 10px 0; background: var(--soft); overflow: hidden; }
+progress::-webkit-progress-bar { background: var(--soft); border-radius: 4px; }
+progress::-webkit-progress-value { background: var(--accent); border-radius: 4px; transition: width .2s; }
+progress::-moz-progress-bar { background: var(--accent); border-radius: 4px; }
 #log {
-  background: var(--log-bg); border: 1px solid var(--line); padding: 10px; height: 220px; overflow: auto;
-  white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0;
+  font-family: var(--mono); background: var(--log-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+  height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0;
 }
 #log .e { color: var(--err); } #log .w { color: var(--warn); } #log .o { color: var(--ok); }
-.banner { border: 1px solid var(--warn); color: var(--warn); padding: 10px 12px; margin: 0 0 16px; display: none; }
-details { color: var(--dim); font-size: 12px; }
-summary { cursor: pointer; color: var(--fg); }
+details { color: var(--dim); font-size: 13px; margin-top: 12px; }
+summary { cursor: pointer; color: var(--fg); font-weight: 500; }
 details ul { margin: 8px 0 0; padding-left: 18px; }
-code { background: var(--log-bg); padding: 0 4px; }
-dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--fg); padding: 20px; max-width: 440px; border-radius: 0; font: inherit; }
-dialog::backdrop { background: rgba(0,0,0,.5); }
-dialog .actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
-footer { color: var(--dim); font-size: 12px; margin-top: 24px; }
-a { color: var(--accent); }
+dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); padding: 22px; max-width: 440px; border-radius: 14px; font: inherit; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+footer { grid-column: 1 / -1; color: var(--dim); font-size: 12px; }
 </style>
 </head>
 <body>
-<main>
-  <h1>t-beam flasher <span>/ C &#8596; MicroPython</span></h1>
-  <p class="sub">LilyGO T-Beam S3 Supreme (ESP32-S3). Swaps the firmware over Web Serial. Nothing leaves the browser.</p>
+<header class="appbar"><div class="appbar-in">
+  <div class="brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></span>T-Beam Flasher</div>
+  <span class="tag">ESP32-S3</span>
+  <span class="spacer"></span>
+  <span class="pill" id="serialpill"><span class="dot" id="pdot"></span><span id="ptext">checking browser</span></span>
+</div></header>
 
+<main class="wrap">
+  <p class="lead">Switch a LilyGO T-Beam S3 Supreme between the C factory firmware and MicroPython, or build MicroPython with a TensorFlow Lite model. Runs in the browser over Web Serial.</p>
   <div class="banner" id="nosupport">Web Serial is not available in this browser. Use Chrome, Edge or Opera on desktop, over HTTPS or localhost.</div>
 
-  <section>
-    <h2>1. Pick a direction</h2>
+  <div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-fw" aria-selected="true" aria-controls="panel-fw">Firmware</button>
+      <button class="tab" role="tab" id="tab-tf" aria-selected="false" aria-controls="panel-tf">TensorFlow build</button>
+    </div>
+
+    <div id="panel-fw" role="tabpanel" aria-labelledby="tab-fw">
+      <div class="card">
+        <h2>Choose a direction</h2>
     <div class="targets">
       <div class="target">
         <h3>C <span class="arrow">&rarr;</span> MicroPython</h3>
@@ -123,10 +149,12 @@ a { color: var(--accent); }
         <button class="primary" id="go-c">Flash C factory</button>
       </div>
     </div>
-  </section>
+      </div>
+    </div>
 
-  <section>
-    <h2>1b. Custom firmware with a TensorFlow Lite model</h2>
+    <div id="panel-tf" role="tabpanel" aria-labelledby="tab-tf" hidden>
+      <div class="card">
+        <h2>MicroPython with TensorFlow Lite</h2>
     <p class="note">MicroPython plus TensorFlow Lite for Microcontrollers (<code>microlite</code>), with a <code>.tflite</code> model frozen into
       flash as the module <code>tflm_model</code>. It is compiled by a GitHub Actions job in this repo, not in your browser.
       Keep models small: the frozen copy sits in flash and is copied to RAM at <code>tflm_model.load()</code>.</p>
@@ -161,10 +189,11 @@ a { color: var(--accent); }
         <div class="status"><span class="dot" id="bdot"></span><span id="buildinfo">Builds take 30 to 60 minutes. You can leave this page open.</span></div>
       </div>
     </div>
-  </section>
+      </div>
+    </div>
 
-  <section>
-    <h2>2. Options</h2>
+    <div class="card">
+      <h2>Settings</h2>
     <div class="row">
       <label class="f">Baud rate
         <select id="baud">
@@ -185,16 +214,17 @@ a { color: var(--accent); }
         <li>Linux: your user needs the <code>uucp</code> or <code>dialout</code> group for <code>/dev/ttyACM0</code>.</li>
       </ul>
     </details>
-  </section>
+    </div>
+  </div>
 
-  <section>
-    <h2>3. Progress</h2>
+  <aside class="activity">
+    <div class="card">
+      <h2>Activity</h2>
     <div class="status"><span class="dot" id="dot"></span><span id="state">idle</span></div>
-    <p></p>
     <progress id="bar" max="100" value="0"></progress>
-    <p></p>
     <pre id="log" aria-live="polite"></pre>
-  </section>
+    </div>
+  </aside>
 
   <footer>
     Flashing uses <a href="https://github.com/espressif/esptool-js">esptool-js</a> (Apache-2.0). MicroPython builds are the official
@@ -526,6 +556,18 @@ async function run(kind) {
 $("go-mp").addEventListener("click", () => run("mp"));
 $("go-c").addEventListener("click", () => run("c"));
 $("go-cust").addEventListener("click", () => run("cust"));
+for (const [tab, panel] of [["tab-fw", "panel-fw"], ["tab-tf", "panel-tf"]]) {
+  $(tab).addEventListener("click", () => {
+    for (const [t, p] of [["tab-fw", "panel-fw"], ["tab-tf", "panel-tf"]]) {
+      $(t).setAttribute("aria-selected", String(t === tab)); $(p).hidden = p !== panel;
+    }
+    try { localStorage.setItem("tab", tab); } catch {}
+  });
+}
+try { const t = localStorage.getItem("tab"); if (t === "tab-tf") $("tab-tf").click(); } catch {}
+{ const ok = "serial" in navigator;
+  $("ptext").textContent = ok ? "Web Serial ready" : "Web Serial unavailable";
+  $("pdot").className = "dot " + (ok ? "ok" : "err"); }
 loadCustomBuilds();
 init().catch((e) => { log("could not load catalog.json: " + e.message, "e"); setState("failed", "err"); });
 </script>
