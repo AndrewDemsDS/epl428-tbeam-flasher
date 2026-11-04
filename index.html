@@ -98,6 +98,10 @@ details ul { margin: 8px 0 0; padding-left: 18px; }
 dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); padding: 22px; max-width: 440px; border-radius: 14px; font: inherit; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
 dialog::backdrop { background: rgba(0,0,0,.45); }
 dialog .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+#drop { border: 2px dashed var(--line); border-radius: 12px; padding: 22px 14px; text-align: center; color: var(--dim); cursor: pointer; background: var(--soft); }
+#drop.over { border-color: var(--accent); color: var(--fg); }
+#drop strong { color: var(--fg); }
+.drop-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-top: 12px; }
 footer { grid-column: 1 / -1; color: var(--dim); font-size: 12px; }
 </style>
 </head>
@@ -149,6 +153,20 @@ footer { grid-column: 1 / -1; color: var(--dim); font-size: 12px; }
         <button class="primary" id="go-c">Flash C factory</button>
       </div>
     </div>
+      </div>
+          <div class="card">
+        <h2>Your own firmware file</h2>
+        <div id="drop" tabindex="0" role="button" aria-label="Choose or drop a firmware .bin file">
+          <strong>Drop a .bin here</strong> or click to choose.<br>Custom MicroPython, a merged image, or any ESP32-S3 firmware.
+          <input type="file" id="dropfile" accept=".bin" hidden>
+        </div>
+        <p class="note" id="dropinfo" style="margin:10px 0 0">No file chosen. You can also drop a file anywhere on this page.</p>
+        <div class="drop-row">
+          <label class="f" style="max-width:200px">Flash address
+            <input type="text" id="dropaddr" value="0x0" spellcheck="false">
+          </label>
+          <button class="primary" id="go-file" disabled>Flash this file</button>
+        </div>
       </div>
     </div>
 
@@ -358,7 +376,7 @@ function confirmDialog(title, body) {
 }
 
 function setBusy(b) {
-  for (const id of ["go-mp", "go-c", "idf", "mp", "cimg", "baud", "erase", "cfile", "go-cust", "cust"]) $(id).disabled = b || ((id === "go-cust" || id === "cust") && !customBuilds.length);
+  for (const id of ["go-mp", "go-c", "idf", "mp", "cimg", "baud", "erase", "cfile", "go-cust", "cust", "go-file", "dropaddr"]) $(id).disabled = b || ((id === "go-cust" || id === "cust") && !customBuilds.length) || (id === "go-file" && !dropped);
 }
 
 // ---- custom builds (GitHub Releases of this repo) ----
@@ -464,7 +482,51 @@ async function watchBuild(token, since) {
 }
 $("go-build").addEventListener("click", startBuild);
 
+let dropped = null; // { name, data, ok }
+function hex(n) { return "0x" + n.toString(16); }
+async function inspectFile(f) {
+  dropped = null; $("go-file").disabled = true;
+  const data = new Uint8Array(await f.arrayBuffer());
+  const notes = [`${f.name}, ${data.length} bytes`];
+  let ok = true;
+  if (data.length < 4096) { notes.push("too small to be firmware"); ok = false; }
+  else if (data[0] !== 0xe9) { notes.push("does not start with an ESP image header (0xE9)"); ok = false; }
+  else {
+    const chip = data[12] | (data[13] << 8);
+    if (chip !== 9) { notes.push(`built for chip id ${chip}, not ESP32-S3 (9). Flashing it would not boot`); ok = false; }
+    else notes.push("ESP32-S3 image");
+  }
+  if (ok) {
+    const text = new TextDecoder("latin1").decode(data);
+    const mp = text.match(/MicroPython v[\w.\-+]+/);
+    const idf = text.match(/IDF version : (v[\w.\-]+)/);
+    if (mp) notes.push(mp[0]);
+    if (idf) notes.push(`ESP-IDF ${idf[1]}`);
+    if (!mp) notes.push("no MicroPython banner found (fine for non-MicroPython firmware)");
+    if (data.length > 8 * 1048576) { notes.push("larger than the 8 MB flash"); ok = false; }
+  }
+  $("dropinfo").textContent = notes.join(" | ");
+  if (ok) { dropped = { name: f.name, data }; $("go-file").disabled = false; }
+}
+function takeFile(f) { if (f) { $("tab-fw").click(); inspectFile(f); } }
+$("drop").addEventListener("click", () => $("dropfile").click());
+$("drop").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("dropfile").click(); } });
+$("dropfile").addEventListener("change", () => takeFile($("dropfile").files[0]));
+for (const ev of ["dragenter", "dragover"]) window.addEventListener(ev, (e) => { e.preventDefault(); $("drop").classList.add("over"); });
+for (const ev of ["dragleave", "drop"]) window.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "drop" || e.target === document.documentElement) $("drop").classList.remove("over"); });
+window.addEventListener("drop", (e) => takeFile(e.dataTransfer?.files?.[0]));
+
 async function loadImage(kind) {
+  if (kind === "file") {
+    if (!dropped) throw new Error("drop a firmware file first");
+    const m = /^(0x[0-9a-f]+|\d+)$/i.exec($("dropaddr").value.trim());
+    if (!m) throw new Error("flash address must be a number like 0x0");
+    const address = Number(m[1]);
+    if (address % 4096) throw new Error("flash address must be a multiple of 0x1000");
+    if (address + dropped.data.length > 8 * 1048576) throw new Error("file does not fit in 8 MB flash at that address");
+    log(`using ${dropped.name} at ${hex(address)}, sha256 ${(await sha256hex(dropped.data)).slice(0, 16)}...`);
+    return { data: dropped.data, address, label: dropped.name };
+  }
   if (kind === "cust") {
     const b = customBuilds[Number($("cust").value)];
     log(`fetching ${b.meta.file}`);
@@ -502,7 +564,8 @@ async function run(kind) {
   let image;
   try {
     const target = kind === "mp" ? `MicroPython v${selectedMp().version}`
-      : kind === "cust" ? `custom build ${customBuilds[Number($("cust").value)].meta.tag}` : "the C factory image";
+      : kind === "cust" ? `custom build ${customBuilds[Number($("cust").value)].meta.tag}`
+      : kind === "file" ? `your file ${dropped?.name ?? ""}` : "the C factory image";
     const ok = await confirmDialog(`Flash ${target}?`,
       ($("erase").checked ? "The whole flash is erased first, including any files on the board. " : "") +
       "Do not unplug the board until it finishes.");
@@ -543,6 +606,7 @@ async function run(kind) {
     setState("done. replug USB if the port does not return", "ok");
     log(kind === "mp" ? "MicroPython is running. Open it with Thonny or: mpremote repl"
       : kind === "cust" ? "Custom firmware is running. In the REPL: import microlite, tflm_model"
+      : kind === "file" ? "Your firmware was written. If it is MicroPython, open it with Thonny or: mpremote repl"
       : "C factory image is running. The screen should show text.", "o");
   } catch (err) {
     log(String(err && err.message || err), "e");
@@ -556,6 +620,7 @@ async function run(kind) {
 $("go-mp").addEventListener("click", () => run("mp"));
 $("go-c").addEventListener("click", () => run("c"));
 $("go-cust").addEventListener("click", () => run("cust"));
+$("go-file").addEventListener("click", () => run("file"));
 for (const [tab, panel] of [["tab-fw", "panel-fw"], ["tab-tf", "panel-tf"]]) {
   $(tab).addEventListener("click", () => {
     for (const [t, p] of [["tab-fw", "panel-fw"], ["tab-tf", "panel-tf"]]) {

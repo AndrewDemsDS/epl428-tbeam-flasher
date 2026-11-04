@@ -12,6 +12,9 @@ Live page: https://andrewdemsds.github.io/epl428-tbeam-flasher/
    - **C to MicroPython**: choose an ESP-IDF version and a MicroPython version, then flash.
      The two selectors are linked: picking an IDF version filters the MicroPython list.
    - **MicroPython to C**: restores the LilyGO factory image, or a `.bin` you pick (written at `0x0`).
+   **Your own firmware**: drag any `.bin` onto the page (or the drop box). The page checks it is an ESP32-S3
+   image, shows the MicroPython and ESP-IDF versions it finds, and flashes it at the address you set (default `0x0`,
+   right for merged images such as `firmware.bin`).
 3. Choose the serial port in the browser prompt. The page checks the chip is an ESP32-S3 before it writes.
 4. Wait for the reset. Replug USB if the port does not come back.
 
