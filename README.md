@@ -46,6 +46,13 @@ so they are older than the official builds above. The release notes list them.
 The model is stored in flash as the frozen module `tflm_model` and copied to RAM only when `load()` runs.
 Built images are kept in Releases, not in the repo.
 
+## MicroPython REPL
+
+The **MicroPython REPL** tab connects to the board over Web Serial: a terminal (xterm.js), interrupt and soft-reset
+buttons, a code box that runs on the board in paste mode, and a button that saves the code as `main.py`.
+For a full editor with a file manager, use [ViperIDE](https://viper-ide.org).
+Links such as `#repl` and `#tensorflow` open a tab directly.
+
 ## What is in the repo
 
 | Path | Purpose |
@@ -55,7 +62,7 @@ Built images are kept in Releases, not in the repo.
 | `firmware/` | official `ESP32_GENERIC_S3` MicroPython releases from micropython.org |
 | `models/` | `.tflite` models for custom builds |
 | `.github/workflows/` | the custom firmware build |
-| `vendor/` | [esptool-js](https://github.com/espressif/esptool-js) 0.7.1 bundle and its licence |
+| `vendor/` | [esptool-js](https://github.com/espressif/esptool-js) 0.7.1 (Apache-2.0) and [xterm.js](https://xtermjs.org) 5.5.0 (MIT), with licences |
 
 MicroPython images are checked against their sha256 before writing, and the flash is verified with an
 MD5 check afterwards. The ESP-IDF version of each build is read from the binary itself.
@@ -78,7 +85,7 @@ version, date, ESP-IDF version (`strings file.bin | grep 'IDF version'`), size a
 
 ## Licences
 
-MicroPython is MIT licensed. esptool-js is Apache-2.0 (`vendor/esptool-js.LICENSE`).
+MicroPython is MIT licensed. esptool-js is Apache-2.0 (`vendor/esptool-js.LICENSE`). xterm.js is MIT (`vendor/xterm.LICENSE`).
 
 ## AI assistance
 

@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>T-Beam Flasher</title>
 <meta name="description" content="Switch a LilyGO T-Beam S3 Supreme between the C factory firmware and MicroPython from the browser, over Web Serial.">
+<link rel="stylesheet" href="vendor/xterm.css">
+<script src="vendor/xterm.js"></script>
+<script src="vendor/xterm-addon-fit.js"></script>
 <style>
 :root {
   --bg: #f6f7f5; --panel: #ffffff; --fg: #1a1d1a; --dim: #5d635c; --line: #dfe2dc; --soft: #f0f2ee;
@@ -102,6 +105,13 @@ dialog .actions { display: flex; gap: 10px; justify-content: flex-end; margin-to
 #drop.over { border-color: var(--accent); color: var(--fg); }
 #drop strong { color: var(--fg); }
 .drop-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-top: 12px; }
+#term { background: var(--log-bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px; height: 320px; overflow: hidden; }
+#term .xterm-viewport { background: transparent !important; }
+#term:focus-within { border-color: var(--accent); }
+#editor { width: 100%; min-height: 120px; font-family: var(--mono); font-size: 12px; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.bar button { min-height: 34px; padding: 6px 12px; }
 footer { grid-column: 1 / -1; color: var(--dim); font-size: 12px; }
 </style>
 </head>
@@ -121,6 +131,7 @@ footer { grid-column: 1 / -1; color: var(--dim); font-size: 12px; }
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" id="tab-fw" aria-selected="true" aria-controls="panel-fw">Firmware</button>
       <button class="tab" role="tab" id="tab-tf" aria-selected="false" aria-controls="panel-tf">TensorFlow build</button>
+      <button class="tab" role="tab" id="tab-repl" aria-selected="false" aria-controls="panel-repl">MicroPython REPL</button>
     </div>
 
     <div id="panel-fw" role="tabpanel" aria-labelledby="tab-fw">
@@ -167,6 +178,33 @@ footer { grid-column: 1 / -1; color: var(--dim); font-size: 12px; }
           </label>
           <button class="primary" id="go-file" disabled>Flash this file</button>
         </div>
+      </div>
+    </div>
+
+    <div id="panel-repl" role="tabpanel" aria-labelledby="tab-repl" hidden>
+      <div class="card">
+        <h2>Board REPL</h2>
+        <p class="note">Talk to MicroPython on the board over Web Serial. Click the terminal and type. Opening the port can reset the board.
+          Close this connection before flashing (flashing does it for you). For a full editor with a file manager, open
+          <a href="https://viper-ide.org" target="_blank" rel="noopener">ViperIDE</a> (MIT, runs in the browser).</p>
+        <div class="bar">
+          <button class="primary" id="repl-connect">Connect</button>
+          <button id="repl-int" disabled>Interrupt (Ctrl-C)</button>
+          <button id="repl-reset" disabled>Soft reset (Ctrl-D)</button>
+          <button id="repl-clear">Clear</button>
+        </div>
+        <div id="term" tabindex="0" role="log" aria-label="MicroPython terminal"></div>
+      </div>
+      <div class="card">
+        <h2>Run code</h2>
+        <textarea id="editor" spellcheck="false">import machine, sys
+print(sys.implementation)
+print(machine.freq())</textarea>
+        <div class="bar" style="margin-top:10px">
+          <button class="primary" id="repl-run" disabled>Run on board</button>
+          <button id="repl-save" disabled>Save as main.py</button>
+        </div>
+        <p class="note" style="margin:0">Run uses paste mode, so multi-line code works. Save writes the editor text to <code>main.py</code>, which runs at boot.</p>
       </div>
     </div>
 
@@ -246,7 +284,7 @@ footer { grid-column: 1 / -1; color: var(--dim); font-size: 12px; }
 
   <footer>
     Flashing uses <a href="https://github.com/espressif/esptool-js">esptool-js</a> (Apache-2.0). MicroPython builds are the official
-    <code>ESP32_GENERIC_S3</code> releases from micropython.org (MIT). The C image belongs to LilyGO and is not redistributed here.
+    <code>ESP32_GENERIC_S3</code> releases from micropython.org (MIT). The REPL terminal is <a href="https://xtermjs.org">xterm.js</a> (MIT). The C image belongs to LilyGO and is not redistributed here.
     Flashing erases the board. Back up anything you need first.
   </footer>
 </main>
@@ -570,6 +608,7 @@ async function run(kind) {
       ($("erase").checked ? "The whole flash is erased first, including any files on the board. " : "") +
       "Do not unplug the board until it finishes.");
     if (!ok) return;
+    await replDisconnect();
     setBusy(true); logEl.replaceChildren(); $("bar").value = 0;
     setState("loading image", "busy");
     image = await loadImage(kind);
@@ -621,15 +660,67 @@ $("go-mp").addEventListener("click", () => run("mp"));
 $("go-c").addEventListener("click", () => run("c"));
 $("go-cust").addEventListener("click", () => run("cust"));
 $("go-file").addEventListener("click", () => run("file"));
-for (const [tab, panel] of [["tab-fw", "panel-fw"], ["tab-tf", "panel-tf"]]) {
+// ---- MicroPython REPL over Web Serial ----
+const repl = { port: null, writer: null, reader: null };
+const enc = new TextEncoder();
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const term = new Terminal({ fontFamily: css("--mono") || "monospace", fontSize: 13, cursorBlink: true, convertEol: false, scrollback: 5000,
+  theme: { background: css("--log-bg"), foreground: css("--fg"), cursor: css("--accent"), selectionBackground: css("--line") } });
+const fit = new FitAddon.FitAddon();
+term.loadAddon(fit); term.open($("term"));
+const refit = () => { try { fit.fit(); } catch {} };
+window.addEventListener("resize", refit);
+function termWrite(chunk) { term.write(chunk); }
+term.onData((d) => { if (repl.writer) repl.writer.write(enc.encode(d)); });
+async function send(str) { if (repl.writer) await repl.writer.write(enc.encode(str)); }
+function setReplUi(on) {
+  $("repl-connect").textContent = on ? "Disconnect" : "Connect";
+  for (const id of ["repl-int", "repl-reset", "repl-run", "repl-save"]) $(id).disabled = !on;
+}
+async function replDisconnect() {
+  const r = repl; if (!r.port) return;
+  repl.port = null;
+  try { await r.reader?.cancel(); } catch {}
+  try { r.writer?.releaseLock(); } catch {}
+  try { await r.port0.close(); } catch {}
+  repl.writer = repl.reader = null; setReplUi(false); termWrite("\r\n[disconnected]\r\n");
+}
+async function replConnect() {
+  try {
+    const port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    try { await port.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch {}
+    repl.port = port; repl.port0 = port;
+    repl.writer = port.writable.getWriter(); repl.reader = port.readable.getReader();
+    setReplUi(true); termWrite("[connected]\r\n"); term.focus();
+    (async () => {
+      try { for (;;) { const { value, done } = await repl.reader.read(); if (done) break; termWrite(value); } }
+      catch { /* port unplugged or cancelled */ }
+      finally { if (repl.port) { repl.port = null; try { repl.writer?.releaseLock(); } catch {} try { await port.close(); } catch {} repl.writer = repl.reader = null; setReplUi(false); termWrite("\r\n[connection lost]\r\n"); } }
+    })();
+    await send("\x03\x03");
+  } catch (e) { termWrite(`[could not connect: ${e.message}]\r\n`); }
+}
+$("repl-connect").addEventListener("click", () => (repl.port ? replDisconnect() : replConnect()));
+$("repl-int").addEventListener("click", () => send("\x03"));
+$("repl-reset").addEventListener("click", () => send("\x04"));
+$("repl-clear").addEventListener("click", () => term.clear());
+async function pasteMode(code) { await send("\x03\x03\x02\x05" + code.replace(/\r?\n/g, "\r") + "\x04"); }
+$("repl-run").addEventListener("click", () => pasteMode($("editor").value));
+$("repl-save").addEventListener("click", () =>
+  pasteMode(`f = open('main.py', 'w')\nf.write(${JSON.stringify($("editor").value)})\nf.close()\nprint('saved main.py')`));
+
+const TABS = [["tab-fw", "panel-fw"], ["tab-tf", "panel-tf"], ["tab-repl", "panel-repl"]];
+for (const [tab] of TABS) {
   $(tab).addEventListener("click", () => {
-    for (const [t, p] of [["tab-fw", "panel-fw"], ["tab-tf", "panel-tf"]]) {
-      $(t).setAttribute("aria-selected", String(t === tab)); $(p).hidden = p !== panel;
-    }
+    for (const [t, p] of TABS) { $(t).setAttribute("aria-selected", String(t === tab)); $(p).hidden = t !== tab; }
     try { localStorage.setItem("tab", tab); } catch {}
+    if (tab === "tab-repl") requestAnimationFrame(refit);
   });
 }
-try { const t = localStorage.getItem("tab"); if (t === "tab-tf") $("tab-tf").click(); } catch {}
+if (location.hash === "#repl") $("tab-repl").click();
+else if (location.hash === "#tensorflow") $("tab-tf").click();
+else try { const t = localStorage.getItem("tab"); if (t === "tab-tf" || t === "tab-repl") $(t).click(); } catch {}
 { const ok = "serial" in navigator;
   $("ptext").textContent = ok ? "Web Serial ready" : "Web Serial unavailable";
   $("pdot").className = "dot " + (ok ? "ok" : "err"); }
