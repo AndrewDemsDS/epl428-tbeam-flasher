@@ -67,7 +67,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .check { display: flex; gap: 8px; align-items: center; color: var(--fg); font-size: 13px; }
 .check input { accent-color: var(--accent); width: 16px; height: 16px; }
 .status { display: flex; gap: 8px; align-items: center; min-height: 22px; }
-.dot { width: 8px; height: 8px; background: var(--dim); display: inline-block; }
+.dot { flex: none; width: 8px; height: 8px; background: var(--dim); display: inline-block; }
 .dot.ok { background: var(--ok); } .dot.busy { background: var(--warn); } .dot.err { background: var(--err); }
 progress { width: 100%; height: 10px; accent-color: var(--accent); }
 #log {
@@ -140,22 +140,25 @@ a { color: var(--accent); }
         <button class="primary" id="go-cust" disabled>Flash custom build</button>
       </div>
       <div class="target">
-        <h3>Start a new build</h3>
+        <h3>Build with your model</h3>
+        <label class="f">Model file (.tflite, up to 48 KB, or leave empty for the sine demo)
+          <input type="file" id="cmodelfile" accept=".tflite">
+        </label>
+        <p id="modelinfo"></p>
         <label class="f">Board
           <select id="cboard">
-            <option value="MICROLITE_S3">ESP32-S3, no PSRAM</option>
+            <option value="MICROLITE_S3">ESP32-S3, no PSRAM (works on every board)</option>
             <option value="MICROLITE_S3_SPIRAM">ESP32-S3, quad PSRAM</option>
             <option value="MICROLITE_S3_SPIRAM_OCTAL">ESP32-S3, octal PSRAM</option>
           </select>
         </label>
-        <label class="f">Model path in the repo (blank = sine demo)
-          <input type="text" id="cmodel" placeholder="models/hello_world_sine.tflite">
+        <label class="f">GitHub token
+          <input type="password" id="ctoken" autocomplete="off" placeholder="paste once per visit">
         </label>
-        <label class="f">GitHub token (Actions: write, this repo only; kept in memory)
-          <input type="password" id="ctoken" autocomplete="off">
-        </label>
-        <button id="go-build">Start build</button>
-        <p id="buildinfo">Add your model to <code>models/</code> in the repo first. Builds take 30 to 60 minutes. Reload this page afterwards.</p>
+        <p><a id="tokenlink" target="_blank" rel="noopener">Create a token</a> (only lets this page start builds in this repo; it is never stored).
+          The uploaded model becomes public in the build log.</p>
+        <button class="primary" id="go-build">Build firmware</button>
+        <div class="status"><span class="dot" id="bdot"></span><span id="buildinfo">Builds take 30 to 60 minutes. You can leave this page open.</span></div>
       </div>
     </div>
   </section>
@@ -337,6 +340,7 @@ async function loadCustomBuilds() {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rels = await res.json();
+    customBuilds = [];
     for (const r of rels.filter((x) => /^custom-/.test(x.tag_name))) {
       const info = r.assets.find((a) => a.name === "build-info.json");
       if (!info) continue;
@@ -362,23 +366,71 @@ function renderCustInfo() {
 }
 $("cust").addEventListener("change", renderCustInfo);
 
+const gh = (path, opts = {}, token) => fetch(`https://api.github.com/repos/${REPO}/${path}`, {
+  ...opts,
+  headers: { Accept: "application/vnd.github+json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opts.headers || {}) },
+});
+function setBuild(text, kind = "") { $("buildinfo").textContent = text; $("bdot").className = "dot " + kind; }
+
+$("tokenlink").href = "https://github.com/settings/personal-access-tokens/new?" + new URLSearchParams({
+  name: "tbeam-flasher-build", description: "Start firmware builds from the T-Beam flasher page",
+  target_name: "AndrewDemsDS", expires_in: "30", actions: "write", metadata: "read",
+}).toString();
+
+let modelB64 = "";
+function b64(bytes) { let s = ""; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); }
+$("cmodelfile").addEventListener("change", async () => {
+  modelB64 = "";
+  const f = $("cmodelfile").files[0];
+  if (!f) { $("modelinfo").textContent = ""; return; }
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  const magic = String.fromCharCode(...bytes.slice(4, 8));
+  if (magic !== "TFL3") { $("modelinfo").textContent = "That is not a TFLite model (missing the TFL3 header)."; return; }
+  if (bytes.length > 48000) { $("modelinfo").textContent = `${bytes.length} bytes is too big for the upload route (48000 max). Commit it to models/ in the repo instead.`; return; }
+  modelB64 = b64(bytes);
+  $("modelinfo").textContent = `OK: ${f.name}, ${bytes.length} bytes.`;
+});
+
 async function startBuild() {
   const token = $("ctoken").value.trim();
-  if (!token) { $("buildinfo").textContent = `No token. Run it from the Actions tab instead: https://github.com/${REPO}/actions/workflows/build-custom.yml`; return; }
+  if (!token) { setBuild("Paste a token first (link below the field).", "err"); return; }
+  if ($("cmodelfile").files[0] && !modelB64) { setBuild("Fix the model file first.", "err"); return; }
   const inputs = { board: $("cboard").value };
-  if ($("cmodel").value.trim()) inputs.model = $("cmodel").value.trim();
+  if (modelB64) inputs.model_b64 = modelB64;
   $("go-build").disabled = true;
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/build-custom.yml/dispatches`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
-      body: JSON.stringify({ ref: "main", inputs }),
-    });
-    $("buildinfo").textContent = res.status === 204
-      ? `Build started. Follow it at https://github.com/${REPO}/actions`
-      : `GitHub refused the request (HTTP ${res.status}). Check the token scope.`;
-  } catch (e) { $("buildinfo").textContent = "request failed: " + e.message; }
+    const started = Date.now();
+    const res = await gh("actions/workflows/build-custom.yml/dispatches",
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ref: "main", inputs }) }, token);
+    if (res.status !== 204) { setBuild(`GitHub refused the request (HTTP ${res.status}). Check the token has Actions: write on this repo.`, "err"); return; }
+    setBuild("Build queued.", "busy");
+    await watchBuild(token, started);
+  } catch (e) { setBuild("Request failed: " + e.message, "err"); }
   finally { $("go-build").disabled = false; $("ctoken").value = ""; }
+}
+
+async function watchBuild(token, since) {
+  let run = null;
+  for (let i = 0; i < 400; i++) {            // about 2 hours at 20 s
+    await new Promise((r) => setTimeout(r, 20000));
+    const res = await gh("actions/workflows/build-custom.yml/runs?event=workflow_dispatch&per_page=5", {}, token);
+    if (!res.ok) continue;
+    run = (await res.json()).workflow_runs.find((r) => Date.parse(r.created_at) >= since - 60000);
+    if (!run) { setBuild("Waiting for the build to start...", "busy"); continue; }
+    if (run.status !== "completed") {
+      const mins = Math.round((Date.now() - Date.parse(run.created_at)) / 60000);
+      setBuild(`Building (${run.status}, ${mins} min). Log: ${run.html_url}`, "busy");
+      continue;
+    }
+    if (run.conclusion === "success") {
+      setBuild("Build finished. It is selected on the left.", "ok");
+      customBuilds = []; await loadCustomBuilds();
+      if (customBuilds.length) $("cust").value = "0";
+      renderCustInfo();
+    } else setBuild(`Build ${run.conclusion}. See ${run.html_url}`, "err");
+    return;
+  }
+  setBuild("Still running after 2 hours. Check the Actions tab.", "err");
 }
 $("go-build").addEventListener("click", startBuild);
 

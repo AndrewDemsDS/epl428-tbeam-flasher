@@ -28,12 +28,15 @@ and a `.tflite` model frozen into flash.
 
 A browser cannot compile firmware, so the build runs in GitHub Actions (`.github/workflows/build-custom.yml`):
 
-1. Put your model in `models/` and commit it. Models over 1 MiB are rejected. Keep them small.
-2. Start the workflow from the Actions tab, or from the page with a fine-grained token (Actions: write on this repo).
-   Pick the board variant: no PSRAM, quad PSRAM or octal PSRAM. The sine demo model is the default.
-3. When it finishes, the build appears as a `custom-N` release. Reload the page and flash it.
+1. On the page, choose your `.tflite` file (up to 48 KB, checked in the browser) or leave it empty for the sine demo.
+   Larger models: commit them to `models/` and start the workflow from the Actions tab with the path.
+2. Pick the board variant (no PSRAM works on every board), paste a fine-grained token (the page links to a
+   pre-filled token form: Actions write, this repo only) and press Build. The token is never stored.
+3. The page shows build progress. When it finishes the build is selected for flashing as a `custom-N` release.
 4. On the board: `import microlite, tflm_model`, then `model = tflm_model.load()` and pass `model` to
    `microlite.interpreter(...)`.
+
+The uploaded model appears in the public build log.
 
 The MicroPython and ESP-IDF versions of a custom build are fixed by the upstream project at the pinned commit,
 so they are older than the official builds above. The release notes list them.

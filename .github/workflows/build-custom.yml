@@ -19,6 +19,10 @@ on:
         description: Path to a .tflite file in this repo (blank = models/hello_world_sine.tflite)
         type: string
         default: ""
+      model_b64:
+        description: Model uploaded from the flasher page, base64 (overrides the path; max about 48 KB)
+        type: string
+        default: ""
       upstream_ref:
         description: Commit of mocleiri/tensorflow-micropython-examples to build
         type: string
@@ -35,6 +39,7 @@ jobs:
       BOARD: ${{ inputs.board }}
       REF: ${{ inputs.upstream_ref }}
       MODEL_IN: ${{ inputs.model }}
+      MODEL_B64: ${{ inputs.model_b64 }}
     steps:
       - name: Checkout this repo
         uses: actions/checkout@v4
@@ -67,6 +72,11 @@ jobs:
         id: model
         run: |
           MODEL="${MODEL_IN:-models/hello_world_sine.tflite}"
+          if [ -n "$MODEL_B64" ]; then
+            mkdir -p self/models
+            printf '%s' "$MODEL_B64" | base64 -d > self/models/uploaded.tflite
+            MODEL=models/uploaded.tflite
+          fi
           test -f "self/$MODEL" || { echo "model not found: $MODEL"; exit 1; }
           # TFLite flatbuffers carry the identifier TFL3 at byte offset 4.
           test "$(dd if="self/$MODEL" bs=1 skip=4 count=4 2>/dev/null)" = "TFL3" || { echo "$MODEL is not a TFLite model"; exit 1; }
