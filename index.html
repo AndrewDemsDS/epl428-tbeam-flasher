@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-Beam Flasher</title>
+<meta name="description" content="Switch a LilyGO T-Beam S3 Supreme between the C factory firmware and MicroPython from the browser, over Web Serial.">
+<style>
+:root {
+  --bg: #f4f2ec; --panel: #fbfaf6; --fg: #1d1f1c; --dim: #626559; --line: #cfccc0;
+  --accent: #1f6f43; --accent-fg: #fbfaf6; --warn: #9a5b00; --err: #a3281f; --ok: #1f6f43;
+  --log-bg: #ecebe3;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141613; --panel: #1b1d19; --fg: #d9dbd2; --dim: #8b8e82; --line: #34372f;
+    --accent: #6fcf97; --accent-fg: #101210; --warn: #e0a93c; --err: #ff7b6e; --ok: #6fcf97;
+    --log-bg: #101210;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141613; --panel: #1b1d19; --fg: #d9dbd2; --dim: #8b8e82; --line: #34372f;
+  --accent: #6fcf97; --accent-fg: #101210; --warn: #e0a93c; --err: #ff7b6e; --ok: #6fcf97;
+  --log-bg: #101210;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.55 "JetBrains Mono", ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
+}
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 18px; margin: 0 0 4px; font-weight: 700; }
+h1 span { color: var(--dim); font-weight: 400; }
+.sub { color: var(--dim); margin: 0 0 24px; }
+section { border: 1px solid var(--line); background: var(--panel); padding: 16px; margin: 0 0 16px; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 12px; font-weight: 600; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin: 0 0 12px; }
+.row:last-child { margin-bottom: 0; }
+label.f { display: flex; flex-direction: column; gap: 4px; color: var(--dim); font-size: 12px; min-width: 160px; flex: 1 1 160px; }
+select, input[type=file] {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  padding: 6px 8px; border-radius: 0; min-height: 34px;
+}
+select:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button {
+  font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--fg); background: transparent; color: var(--fg);
+  padding: 10px 14px; border-radius: 0; min-height: 40px;
+}
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button:hover:not(:disabled) { filter: brightness(1.08); }
+button:disabled { opacity: .4; cursor: not-allowed; }
+.targets { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .targets { grid-template-columns: 1fr; } }
+.target { border: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.target h3 { margin: 0; font-size: 14px; }
+.target p { margin: 0; color: var(--dim); font-size: 12px; }
+.target .grow { flex: 1; }
+.arrow { color: var(--accent); }
+.check { display: flex; gap: 8px; align-items: center; color: var(--fg); font-size: 13px; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+.status { display: flex; gap: 8px; align-items: center; min-height: 22px; }
+.dot { width: 8px; height: 8px; background: var(--dim); display: inline-block; }
+.dot.ok { background: var(--ok); } .dot.busy { background: var(--warn); } .dot.err { background: var(--err); }
+progress { width: 100%; height: 10px; accent-color: var(--accent); }
+#log {
+  background: var(--log-bg); border: 1px solid var(--line); padding: 10px; height: 220px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0;
+}
+#log .e { color: var(--err); } #log .w { color: var(--warn); } #log .o { color: var(--ok); }
+.banner { border: 1px solid var(--warn); color: var(--warn); padding: 10px 12px; margin: 0 0 16px; display: none; }
+details { color: var(--dim); font-size: 12px; }
+summary { cursor: pointer; color: var(--fg); }
+details ul { margin: 8px 0 0; padding-left: 18px; }
+code { background: var(--log-bg); padding: 0 4px; }
+dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--fg); padding: 20px; max-width: 440px; border-radius: 0; font: inherit; }
+dialog::backdrop { background: rgba(0,0,0,.5); }
+dialog .actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
+footer { color: var(--dim); font-size: 12px; margin-top: 24px; }
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>t-beam flasher <span>/ C &#8596; MicroPython</span></h1>
+  <p class="sub">LilyGO T-Beam S3 Supreme (ESP32-S3). Swaps the firmware over Web Serial. Nothing leaves the browser.</p>
+
+  <div class="banner" id="nosupport">Web Serial is not available in this browser. Use Chrome, Edge or Opera on desktop, over HTTPS or localhost.</div>
+
+  <section>
+    <h2>1. Pick a direction</h2>
+    <div class="targets">
+      <div class="target">
+        <h3>C <span class="arrow">&rarr;</span> MicroPython</h3>
+        <p class="grow">Writes a MicroPython build for the ESP32-S3 at flash address 0.</p>
+        <div class="row">
+          <label class="f">ESP-IDF version
+            <select id="idf"></select>
+          </label>
+          <label class="f">MicroPython version
+            <select id="mp"></select>
+          </label>
+        </div>
+        <p id="mpinfo"></p>
+        <button class="primary" id="go-mp">Flash MicroPython</button>
+      </div>
+      <div class="target">
+        <h3>MicroPython <span class="arrow">&rarr;</span> C</h3>
+        <p class="grow">Restores the LilyGO factory image (the C demo that shows text on the screen). Fetched from the LilyGO repo at flash time.</p>
+        <label class="f">Image
+          <select id="cimg"></select>
+        </label>
+        <label class="f" id="cfile-wrap" hidden>Local .bin (written at 0x0)
+          <input type="file" id="cfile" accept=".bin">
+        </label>
+        <button class="primary" id="go-c">Flash C factory</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Options</h2>
+    <div class="row">
+      <label class="f">Baud rate
+        <select id="baud">
+          <option value="115200">115200</option>
+          <option value="230400">230400</option>
+          <option value="460800" selected>460800</option>
+          <option value="921600">921600</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="erase" checked> erase all flash first (recommended when switching)</label>
+    </div>
+    <details>
+      <summary>If the board is not found</summary>
+      <ul>
+        <li>The ESP32-S3 USB port resets itself into the bootloader. If connecting fails, hold <code>BOOT</code> while plugging in USB, then try again.</li>
+        <li>After flashing, the page resets the board. Unplug and replug if the port does not come back.</li>
+        <li>Close Thonny, <code>mpremote</code>, a serial monitor or any other tab that holds the port.</li>
+        <li>Linux: your user needs the <code>uucp</code> or <code>dialout</code> group for <code>/dev/ttyACM0</code>.</li>
+      </ul>
+    </details>
+  </section>
+
+  <section>
+    <h2>3. Progress</h2>
+    <div class="status"><span class="dot" id="dot"></span><span id="state">idle</span></div>
+    <p></p>
+    <progress id="bar" max="100" value="0"></progress>
+    <p></p>
+    <pre id="log" aria-live="polite"></pre>
+  </section>
+
+  <footer>
+    Flashing uses <a href="https://github.com/espressif/esptool-js">esptool-js</a> (Apache-2.0). MicroPython builds are the official
+    <code>ESP32_GENERIC_S3</code> releases from micropython.org (MIT). The C image belongs to LilyGO and is not redistributed here.
+    Flashing erases the board. Back up anything you need first.
+  </footer>
+</main>
+
+<dialog id="confirm">
+  <strong id="confirm-title"></strong>
+  <p id="confirm-body"></p>
+  <div class="actions">
+    <button id="confirm-no" type="button">Cancel</button>
+    <button id="confirm-yes" type="button" class="primary">Flash</button>
+  </div>
+</dialog>
+
+<script type="module">
+import { ESPLoader, Transport } from "./vendor/esptool-js.bundle.js";
+
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+
+function log(msg, cls = "") {
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function setState(text, kind = "") {
+  $("state").textContent = text;
+  $("dot").className = "dot " + kind;
+}
+
+// Compact MD5 for esptool-js flash verification (input: Uint8Array, output: hex string).
+function md5(bytes) {
+  const K = new Uint32Array(64), S = [7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21];
+  for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296);
+  const len = bytes.length, padded = new Uint8Array(((len + 8) >> 6 << 6) + 64);
+  padded.set(bytes); padded[len] = 0x80;
+  const dv = new DataView(padded.buffer);
+  dv.setUint32(padded.length - 8, (len << 3) >>> 0, true);
+  dv.setUint32(padded.length - 4, Math.floor(len / 536870912), true);
+  let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+  const M = new Uint32Array(16);
+  for (let off = 0; off < padded.length; off += 64) {
+    for (let j = 0; j < 16; j++) M[j] = dv.getUint32(off + j * 4, true);
+    let A = a0, B = b0, C = c0, D = d0;
+    for (let i = 0; i < 64; i++) {
+      let F, g;
+      if (i < 16) { F = (B & C) | (~B & D); g = i; }
+      else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) & 15; }
+      else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) & 15; }
+      else { F = C ^ (B | ~D); g = (7 * i) & 15; }
+      F = (F + A + K[i] + M[g]) >>> 0;
+      A = D; D = C; C = B;
+      const s = S[(i >> 4) * 4 + (i & 3)];
+      B = (B + ((F << s) | (F >>> (32 - s)))) >>> 0;
+    }
+    a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+  }
+  const out = new Uint8Array(16), ov = new DataView(out.buffer);
+  ov.setUint32(0, a0, true); ov.setUint32(4, b0, true); ov.setUint32(8, c0, true); ov.setUint32(12, d0, true);
+  return [...out].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+window.__md5 = md5; // exposed so the test script can check it against a reference
+
+let catalog = null;
+
+async function sha256hex(bytes) {
+  const h = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function fillSelect(sel, items, selected) {
+  sel.replaceChildren(...items.map(([value, label]) => {
+    const o = document.createElement("option");
+    o.value = value; o.textContent = label; return o;
+  }));
+  if (selected !== undefined) sel.value = selected;
+}
+
+function renderMp() {
+  const idf = $("idf").value;
+  const list = catalog.micropython.filter((e) => idf === "any" || e.idf === idf);
+  const current = $("mp").value;
+  fillSelect($("mp"), list.map((e) => [e.version, `v${e.version} (${e.date})`]),
+    list.some((e) => e.version === current) ? current : list[0]?.version);
+  renderInfo();
+}
+function renderInfo() {
+  const e = catalog.micropython.find((x) => x.version === $("mp").value);
+  $("mpinfo").textContent = e ? `built with ESP-IDF ${e.idf}, ${(e.size / 1048576).toFixed(2)} MiB` : "";
+}
+function selectedMp() { return catalog.micropython.find((x) => x.version === $("mp").value); }
+
+async function init() {
+  if (!("serial" in navigator)) $("nosupport").style.display = "block";
+  catalog = await (await fetch("catalog.json", { cache: "no-cache" })).json();
+  const idfs = [...new Set(catalog.micropython.map((e) => e.idf))];
+  fillSelect($("idf"), [["any", "any"], ...idfs.map((v) => [v, v])], "any");
+  renderMp();
+  fillSelect($("cimg"), [["factory", catalog.c.name], ["file", "Local .bin file..."]], "factory");
+  $("idf").addEventListener("change", renderMp);
+  $("mp").addEventListener("change", () => {
+    const e = selectedMp();
+    // Keep the IDF filter in step with the chosen build unless it is on "any".
+    if ($("idf").value !== "any" && e) $("idf").value = e.idf;
+    renderInfo();
+  });
+  $("cimg").addEventListener("change", () => { $("cfile-wrap").hidden = $("cimg").value !== "file"; });
+}
+
+function confirmDialog(title, body) {
+  return new Promise((resolve) => {
+    const d = $("confirm");
+    $("confirm-title").textContent = title;
+    $("confirm-body").textContent = body;
+    const done = (v) => { d.close(); $("confirm-yes").onclick = $("confirm-no").onclick = null; resolve(v); };
+    $("confirm-yes").onclick = () => done(true);
+    $("confirm-no").onclick = () => done(false);
+    d.addEventListener("cancel", () => done(false), { once: true });
+    d.showModal();
+  });
+}
+
+function setBusy(b) {
+  for (const id of ["go-mp", "go-c", "idf", "mp", "cimg", "baud", "erase", "cfile"]) $(id).disabled = b;
+}
+
+async function loadImage(kind) {
+  if (kind === "mp") {
+    const e = selectedMp();
+    log(`fetching ${e.file}`);
+    const buf = new Uint8Array(await (await fetch(e.file)).arrayBuffer());
+    if (buf.length !== e.size || (await sha256hex(buf)) !== e.sha256) throw new Error("bundled image failed its sha256 check");
+    log(`sha256 ok (${buf.length} bytes)`, "o");
+    return { data: buf, address: 0, label: `MicroPython v${e.version}` };
+  }
+  if ($("cimg").value === "file") {
+    const f = $("cfile").files[0];
+    if (!f) throw new Error("choose a .bin file first");
+    return { data: new Uint8Array(await f.arrayBuffer()), address: 0, label: f.name };
+  }
+  log(`fetching ${catalog.c.url}`);
+  const res = await fetch(catalog.c.url);
+  if (!res.ok) throw new Error(`factory image download failed (HTTP ${res.status}). Use a local .bin instead.`);
+  const buf = new Uint8Array(await res.arrayBuffer());
+  log(`got ${buf.length} bytes`, "o");
+  return { data: buf, address: catalog.c.address, label: "LilyGO factory (C)" };
+}
+
+async function run(kind) {
+  if (!("serial" in navigator)) { log("Web Serial unavailable", "e"); return; }
+  let image;
+  try {
+    const target = kind === "mp" ? `MicroPython v${selectedMp().version}` : "the C factory image";
+    const ok = await confirmDialog(`Flash ${target}?`,
+      ($("erase").checked ? "The whole flash is erased first, including any files on the board. " : "") +
+      "Do not unplug the board until it finishes.");
+    if (!ok) return;
+    setBusy(true); logEl.replaceChildren(); $("bar").value = 0;
+    setState("loading image", "busy");
+    image = await loadImage(kind);
+  } catch (err) { log(String(err.message || err), "e"); setState("failed", "err"); setBusy(false); return; }
+
+  let transport;
+  try {
+    setState("choose a port", "busy");
+    const port = await navigator.serial.requestPort();
+    transport = new Transport(port, false);
+    const loader = new ESPLoader({
+      transport, baudrate: Number($("baud").value), romBaudrate: 115200,
+      terminal: { clean() {}, write: (m) => log(m), writeLine: (m) => log(m) },
+    });
+    setState("connecting", "busy");
+    const chip = await loader.main();
+    log(`connected: ${chip}`, "o");
+    if (!/ESP32-S3/i.test(chip)) {
+      log(`this is not an ESP32-S3 (${chip}); refusing to flash`, "e");
+      setState("wrong chip", "err");
+      return;
+    }
+    setState(`flashing ${image.label}`, "busy");
+    await loader.writeFlash({
+      fileArray: [{ data: image.data, address: image.address }],
+      flashSize: "keep", flashMode: "keep", flashFreq: "keep",
+      eraseAll: $("erase").checked, compress: true,
+      reportProgress: (_i, written, total) => { $("bar").value = Math.round((written / total) * 100); },
+      calculateMD5Hash: (img) => md5(img),
+    });
+    $("bar").value = 100;
+    log("write finished, resetting board", "o");
+    await loader.after("hard_reset");
+    setState("done. replug USB if the port does not return", "ok");
+    log(kind === "mp"
+      ? "MicroPython is running. Open it with Thonny or: mpremote repl"
+      : "C factory image is running. The screen should show text.", "o");
+  } catch (err) {
+    log(String(err && err.message || err), "e");
+    setState("failed", "err");
+  } finally {
+    try { await transport?.disconnect(); } catch {}
+    setBusy(false);
+  }
+}
+
+$("go-mp").addEventListener("click", () => run("mp"));
+$("go-c").addEventListener("click", () => run("c"));
+init().catch((e) => { log("could not load catalog.json: " + e.message, "e"); setState("failed", "err"); });
+</script>
+</body>
+</html>

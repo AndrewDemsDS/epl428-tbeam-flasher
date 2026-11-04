@@ -1,0 +1,49 @@
+{
+  "micropython": [
+    {
+      "version": "1.29.0",
+      "date": "2026-08-24",
+      "idf": "v5.5.2",
+      "file": "firmware/ESP32_GENERIC_S3-20260824-v1.29.0.bin",
+      "size": 1783296,
+      "sha256": "1dd9dcd27ba2d6a1cb7f7b49a063f46d3d807d68b0151161233920228285e300"
+    },
+    {
+      "version": "1.28.0",
+      "date": "2026-04-06",
+      "idf": "v5.5.1",
+      "file": "firmware/ESP32_GENERIC_S3-20260406-v1.28.0.bin",
+      "size": 1754608,
+      "sha256": "8c6039d40024cae3c6b04bb434f77901548f5487df9789af15548c54f9e11d7f"
+    },
+    {
+      "version": "1.27.0",
+      "date": "2025-12-09",
+      "idf": "v5.5.1",
+      "file": "firmware/ESP32_GENERIC_S3-20251209-v1.27.0.bin",
+      "size": 1753904,
+      "sha256": "f533115edca660863b1308445d5c08e3fa108b34c39229a53c2f984a8186a9cd"
+    },
+    {
+      "version": "1.26.1",
+      "date": "2025-09-11",
+      "idf": "v5.4.2",
+      "file": "firmware/ESP32_GENERIC_S3-20250911-v1.26.1.bin",
+      "size": 1735456,
+      "sha256": "d6c48687f684cc7c002a0a4acd258f881c4b391f3ef121726a3b7cd285dcdbbc"
+    },
+    {
+      "version": "1.25.0",
+      "date": "2025-04-15",
+      "idf": "v5.2.2",
+      "file": "firmware/ESP32_GENERIC_S3-20250415-v1.25.0.bin",
+      "size": 1673008,
+      "sha256": "3f25a6c4f6fa6d68c8959152c9fa0962c90ef2dab5cccc984e42b5bc5c63fea3"
+    }
+  ],
+  "c": {
+    "name": "LilyGO T-Beam S3 Supreme factory (SX1262)",
+    "url": "https://raw.githubusercontent.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/master/firmware/tbeam-s3-supreme-v3.x-all-band-sx1262-factory-20260715_0x0.bin",
+    "address": 0
+  }
+}
