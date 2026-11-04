@@ -20,6 +20,26 @@ other program that holds the port.
 
 Flashing erases the board (the option is on by default). Files stored on a MicroPython board are lost.
 
+## Custom firmware with a TensorFlow Lite model
+
+The page can also flash a custom MicroPython build that includes TensorFlow Lite for Microcontrollers
+(the `microlite` module from [mocleiri/tensorflow-micropython-examples](https://github.com/mocleiri/tensorflow-micropython-examples))
+and a `.tflite` model frozen into flash.
+
+A browser cannot compile firmware, so the build runs in GitHub Actions (`.github/workflows/build-custom.yml`):
+
+1. Put your model in `models/` and commit it. Models over 1 MiB are rejected. Keep them small.
+2. Start the workflow from the Actions tab, or from the page with a fine-grained token (Actions: write on this repo).
+   Pick the board variant: no PSRAM, quad PSRAM or octal PSRAM. The sine demo model is the default.
+3. When it finishes, the build appears as a `custom-N` release. Reload the page and flash it.
+4. On the board: `import microlite, tflm_model`, then `model = tflm_model.load()` and pass `model` to
+   `microlite.interpreter(...)`.
+
+The MicroPython and ESP-IDF versions of a custom build are fixed by the upstream project at the pinned commit,
+so they are older than the official builds above. The release notes list them.
+The model is stored in flash as the frozen module `tflm_model` and copied to RAM only when `load()` runs.
+Built images are kept in Releases, not in the repo.
+
 ## What is in the repo
 
 | Path | Purpose |
@@ -27,6 +47,8 @@ Flashing erases the board (the option is on by default). Files stored on a Micro
 | `index.html` | the whole app, one file, no build step |
 | `catalog.json` | MicroPython builds (version, ESP-IDF version, sha256) and the C image URL |
 | `firmware/` | official `ESP32_GENERIC_S3` MicroPython releases from micropython.org |
+| `models/` | `.tflite` models for custom builds |
+| `.github/workflows/` | the custom firmware build |
 | `vendor/` | [esptool-js](https://github.com/espressif/esptool-js) 0.7.1 bundle and its licence |
 
 MicroPython images are checked against their sha256 before writing, and the flash is verified with an
