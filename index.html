@@ -59,6 +59,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .targets { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 600px) { .targets { grid-template-columns: 1fr; } }
 .target { border: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.target > label.f { flex: 0 0 auto; }
 .target h3 { margin: 0; font-size: 14px; }
 .target p { margin: 0; color: var(--dim); font-size: 12px; }
 .target .grow { flex: 1; }
