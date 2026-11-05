@@ -185,7 +185,6 @@ function setState(text, kind = "") {
   $("dot").className = badge(kind); $("dot").textContent = KIND_TEXT[kind] || "idle";
 }
 
-// Compact MD5 for esptool-js flash verification (input: Uint8Array, output: hex string).
 function md5(bytes) {
   const K = new Uint32Array(64), S = [7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21];
   for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296);
@@ -216,7 +215,6 @@ function md5(bytes) {
   ov.setUint32(0, a0, true); ov.setUint32(4, b0, true); ov.setUint32(8, c0, true); ov.setUint32(12, d0, true);
   return [...out].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
-window.__md5 = md5; // exposed so the test script can check it against a reference
 
 let catalog = null;
 
@@ -262,7 +260,6 @@ async function init() {
   $("idf").addEventListener("change", renderMp);
   $("mp").addEventListener("change", () => {
     const e = selectedMp();
-    // Keep the IDF filter in step with the chosen build unless it is on "any".
     if ($("idf").value !== "any" && e) $("idf").value = e.idf;
     renderInfo();
   });
@@ -286,7 +283,7 @@ function setBusy(b) {
   for (const id of ["go-mp", "go-c", "idf", "mp", "cimg", "baud", "erase", "cfile", "go-file", "dropaddr"]) $(id).disabled = b || (id === "go-file" && !dropped);
 }
 
-let dropped = null; // { name, data, ok }
+let dropped = null;
 function hex(n) { return "0x" + n.toString(16); }
 async function inspectFile(f) {
   dropped = null; $("go-file").disabled = true;
@@ -412,7 +409,6 @@ async function run(kind) {
 $("go-mp").addEventListener("click", () => run("mp"));
 $("go-c").addEventListener("click", () => run("c"));
 $("go-file").addEventListener("click", () => run("file"));
-// ---- MicroPython REPL over Web Serial ----
 const repl = { port: null, writer: null, reader: null };
 const enc = new TextEncoder();
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -447,7 +443,7 @@ async function replConnect() {
     setReplUi(true); termWrite("[connected]\r\n"); term.focus();
     (async () => {
       try { for (;;) { const { value, done } = await repl.reader.read(); if (done) break; termWrite(value); } }
-      catch { /* port unplugged or cancelled */ }
+      catch {}
       finally { if (repl.port) { repl.port = null; try { repl.writer?.releaseLock(); } catch {} try { await port.close(); } catch {} repl.writer = repl.reader = null; setReplUi(false); termWrite("\r\n[connection lost]\r\n"); } }
     })();
     await send("\x03\x03");
