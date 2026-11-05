@@ -33,12 +33,12 @@ space left. If the REPL does not appear over USB after flashing, flash an offici
 Try the sine demo in `examples/`: copy `hello_world.py` and `model.tflite` to the root of the board
 (`mpremote cp examples/hello_world.py examples/model.tflite :`), then `import hello_world` in the REPL.
 
-## MicroPython REPL
+## Python IDE
 
-The **MicroPython REPL** tab connects to the board over Web Serial: a terminal (xterm.js), interrupt and soft-reset
-buttons, a code box that runs on the board in paste mode, and a button that saves the code as `main.py`.
-For a full editor with a file manager, use [ViperIDE](https://viper-ide.org).
-The link `#repl` opens that tab directly.
+The **Python IDE** tab embeds [ViperIDE](https://viper-ide.org) (MIT), an existing browser IDE for MicroPython with an editor,
+terminal and file manager. Use its USB button to connect the board. Flashing from this page unloads the IDE first so the
+serial port is free. Some browsers block third-party storage inside frames and leave the frame blank, so there is also an
+"Open in new tab" button. The link `#ide` opens the tab directly.
 
 ## What is in the repo
 
@@ -71,7 +71,7 @@ version, date, ESP-IDF version (`strings file.bin | grep 'IDF version'`), size a
 
 ## Licences
 
-MicroPython is MIT licensed. esptool-js is Apache-2.0 (`vendor/esptool-js.LICENSE`). xterm.js is MIT (`vendor/xterm.LICENSE`). Bootstrap is MIT (`vendor/bootstrap.LICENSE`).
+MicroPython is MIT licensed. esptool-js is Apache-2.0 (`vendor/esptool-js.LICENSE`). Bootstrap is MIT (`vendor/bootstrap.LICENSE`).
 
 ## AI assistance
 

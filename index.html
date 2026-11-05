@@ -11,16 +11,12 @@
   applyTheme(); mq.addEventListener("change", applyTheme);
 </script>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
-<link rel="stylesheet" href="vendor/xterm.css">
-<script defer src="vendor/xterm.js"></script>
-<script defer src="vendor/xterm-addon-fit.js"></script>
 <style>
   #drop { border: 2px dashed var(--bs-border-color); cursor: pointer; }
   #drop.over { border-color: var(--bs-primary); background: var(--bs-tertiary-bg); }
   .container { max-width: 820px; }
-  #term { height: 320px; }
+  #ide { width: 100%; height: 78vh; min-height: 480px; border: 0; }
   #log { height: 200px; white-space: pre-wrap; font-size: 12px; }
-  #editor { font-size: 13px; }
 </style>
 </head>
 <body>
@@ -37,7 +33,7 @@
 
   <ul class="nav nav-tabs mb-3" role="tablist">
     <li class="nav-item"><button class="nav-link active" role="tab" id="tab-fw" aria-selected="true" aria-controls="panel-fw">Firmware</button></li>
-    <li class="nav-item"><button class="nav-link" role="tab" id="tab-repl" aria-selected="false" aria-controls="panel-repl">MicroPython REPL</button></li>
+    <li class="nav-item"><button class="nav-link" role="tab" id="tab-ide" aria-selected="false" aria-controls="panel-ide">Python IDE</button></li>
   </ul>
 
   <div id="panel-fw" role="tabpanel" aria-labelledby="tab-fw">
@@ -86,30 +82,17 @@
     </div></div>
   </div>
 
-  <div id="panel-repl" role="tabpanel" aria-labelledby="tab-repl" hidden>
+  <div id="panel-ide" role="tabpanel" aria-labelledby="tab-ide" hidden>
     <div class="card mb-3"><div class="card-body">
-      <h5 class="card-title">Board REPL</h5>
-      <p class="small text-body-secondary">Talk to MicroPython on the board over Web Serial. Click the terminal and type. Opening the port can reset the board.
-        Close this connection before flashing (flashing does it for you). For a full editor with a file manager, open
-        <a href="https://viper-ide.org" target="_blank" rel="noopener">ViperIDE</a>.</p>
-      <div class="d-flex gap-2 flex-wrap mb-2">
-        <button class="btn btn-primary btn-sm" id="repl-connect">Connect</button>
-        <button class="btn btn-outline-secondary btn-sm" id="repl-int" disabled>Interrupt (Ctrl-C)</button>
-        <button class="btn btn-outline-secondary btn-sm" id="repl-reset" disabled>Soft reset (Ctrl-D)</button>
-        <button class="btn btn-outline-secondary btn-sm" id="repl-clear">Clear</button>
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+        <p class="small text-body-secondary mb-0">
+          ViperIDE (MIT) runs below: editor, REPL and file manager for MicroPython. Use its USB button to connect the board.
+          Flashing from this page unloads the IDE first so the serial port is free. If the frame stays blank (some browsers block
+          third-party storage in frames), open it in its own tab.
+        </p>
+        <a class="btn btn-outline-primary btn-sm text-nowrap" href="https://viper-ide.org" target="_blank" rel="noopener">Open in new tab</a>
       </div>
-      <div id="term" class="border rounded p-2 bg-body-tertiary overflow-hidden" role="log" aria-label="MicroPython terminal"></div>
-    </div></div>
-    <div class="card mb-3"><div class="card-body">
-      <h5 class="card-title">Run code</h5>
-      <textarea class="form-control font-monospace" id="editor" rows="6" spellcheck="false">import machine, sys
-print(sys.implementation)
-print(machine.freq())</textarea>
-      <div class="d-flex gap-2 mt-2">
-        <button class="btn btn-primary btn-sm" id="repl-run" disabled>Run on board</button>
-        <button class="btn btn-outline-secondary btn-sm" id="repl-save" disabled>Save as main.py</button>
-      </div>
-      <p class="small text-body-secondary mt-2 mb-0">Run uses paste mode, so multi-line code works. Save writes the editor text to <code>main.py</code>, which runs at boot.</p>
+      <iframe id="ide" title="ViperIDE" allow="serial; usb; clipboard-read; clipboard-write" class="rounded border"></iframe>
     </div></div>
   </div>
 
@@ -149,7 +132,7 @@ print(machine.freq())</textarea>
   </div></div>
 
   <p class="small text-body-secondary">
-    Flashing uses <a href="https://github.com/espressif/esptool-js">esptool-js</a> (Apache-2.0), the terminal is <a href="https://xtermjs.org">xterm.js</a> (MIT),
+    Flashing uses <a href="https://github.com/espressif/esptool-js">esptool-js</a> (Apache-2.0), the Python IDE is <a href="https://viper-ide.org">ViperIDE</a> (MIT, embedded from viper-ide.org),
     the layout is <a href="https://getbootstrap.com">Bootstrap</a> (MIT). MicroPython builds are the official <code>ESP32_GENERIC_S3</code> releases from micropython.org (MIT).
     The C image belongs to LilyGO and is not redistributed here. Flashing erases the board. Back up anything you need first.
   </p>
@@ -344,11 +327,11 @@ async function loadFile() {
 
 const SOURCES = {
   mp: { target: () => `MicroPython v${selectedMp().version}`, load: loadMp,
-        done: "MicroPython is running. Open it with Thonny or: mpremote repl" },
+        done: "MicroPython is running. Open the Python IDE tab to use it" },
   c: { target: () => "the C factory image", load: loadC,
        done: "C factory image is running. The screen should show text." },
   file: { target: () => `your file ${dropped.name}`, load: loadFile,
-          done: "Your firmware was written. If it is MicroPython, open it with Thonny or: mpremote repl" },
+          done: "Your firmware was written. If it is MicroPython, open the Python IDE tab to use it" },
 };
 
 async function run(kind) {
@@ -360,7 +343,7 @@ async function run(kind) {
       ($("erase").checked ? "The whole flash is erased first, including any files on the board. " : "") +
       "Do not unplug the board until it finishes.");
     if (!ok) return;
-    await replDisconnect();
+    unloadIde();
     setBusy(true); logEl.replaceChildren(); setBar(0);
     setState("loading image", "busy");
     const image = await src.load();
@@ -402,72 +385,20 @@ async function run(kind) {
 }
 for (const kind of Object.keys(SOURCES)) $("go-" + kind).addEventListener("click", () => run(kind));
 
-const repl = { port: null, writer: null, reader: null };
-const enc = new TextEncoder();
-let term, fit;
-function ensureTerm() {
-  if (term) return;
-  const cs = getComputedStyle(document.documentElement);
-  const color = (v) => cs.getPropertyValue(v).trim();
-  term = new Terminal({ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13, cursorBlink: true, scrollback: 5000,
-    theme: { background: color("--bs-tertiary-bg"), foreground: color("--bs-body-color"), cursor: color("--bs-primary"), selectionBackground: color("--bs-border-color") } });
-  fit = new FitAddon.FitAddon();
-  term.loadAddon(fit); term.open($("term"));
-  term.onData(send);
-  new ResizeObserver(() => { try { fit.fit(); } catch {} }).observe($("term"));
-}
-const out = (chunk) => term?.write(chunk);
-async function send(str) { if (repl.writer) await repl.writer.write(enc.encode(str)); }
-function setReplUi(on) {
-  $("repl-connect").textContent = on ? "Disconnect" : "Connect";
-  for (const id of ["repl-int", "repl-reset", "repl-run", "repl-save"]) $(id).disabled = !on;
-}
-async function replDisconnect(msg = "[disconnected]") {
-  const { port, reader, writer } = repl;
-  if (!port) return;
-  repl.port = repl.reader = repl.writer = null;
-  try { await reader?.cancel(); } catch {}
-  try { reader?.releaseLock(); } catch {}
-  try { writer?.releaseLock(); } catch {}
-  try { await port.close(); } catch {}
-  setReplUi(false); out(`\r\n${msg}\r\n`);
-}
-async function pump(port, reader) {
-  try { for (;;) { const { value, done } = await reader.read(); if (done) break; out(value); } }
-  catch {}
-  finally { if (repl.port === port) await replDisconnect("[connection lost]"); }
-}
-async function replConnect() {
-  try {
-    ensureTerm();
-    const port = await navigator.serial.requestPort();
-    await port.open({ baudRate: 115200 });
-    try { await port.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch {}
-    Object.assign(repl, { port, writer: port.writable.getWriter(), reader: port.readable.getReader() });
-    setReplUi(true); out("[connected]\r\n"); term.focus();
-    pump(port, repl.reader);
-    await send("\x03\x03");
-  } catch (e) { out(`[could not connect: ${e.message}]\r\n`); }
-}
-$("repl-connect").addEventListener("click", () => (repl.port ? replDisconnect() : replConnect()));
-$("repl-int").addEventListener("click", () => send("\x03"));
-$("repl-reset").addEventListener("click", () => send("\x04"));
-$("repl-clear").addEventListener("click", () => term?.clear());
-const pasteMode = (code) => send("\x03\x03\x02\x05" + code.replace(/\r?\n/g, "\r") + "\x04");
-$("repl-run").addEventListener("click", () => pasteMode($("editor").value));
-$("repl-save").addEventListener("click", () =>
-  pasteMode(`f = open('main.py', 'w')\nf.write(${JSON.stringify($("editor").value)})\nf.close()\nprint('saved main.py')`));
+const ide = $("ide");
+const loadIde = () => { if (!ide.getAttribute("src")) ide.src = "https://viper-ide.org/"; };
+const unloadIde = () => { if (ide.getAttribute("src")) ide.removeAttribute("src"); };
 
-const TABS = [["tab-fw", "panel-fw"], ["tab-repl", "panel-repl"]];
+const TABS = [["tab-fw", "panel-fw"], ["tab-ide", "panel-ide"]];
 for (const [tab] of TABS) {
   $(tab).addEventListener("click", () => {
     for (const [t, p] of TABS) { $(t).setAttribute("aria-selected", String(t === tab)); $(t).classList.toggle("active", t === tab); $(p).hidden = t !== tab; }
     try { localStorage.setItem("tab", tab); } catch {}
-    if (tab === "tab-repl") ensureTerm();
+    if (tab === "tab-ide") loadIde();
   });
 }
-if (location.hash === "#repl") $("tab-repl").click();
-else try { if (localStorage.getItem("tab") === "tab-repl") $("tab-repl").click(); } catch {}
+if (location.hash === "#ide" || location.hash === "#repl") $("tab-ide").click();
+else try { if (localStorage.getItem("tab") === "tab-ide") $("tab-ide").click(); } catch {}
 init().catch((e) => { log("could not load catalog.json: " + e.message, "text-danger"); setState("failed", "err"); });
 </script>
 </body>
