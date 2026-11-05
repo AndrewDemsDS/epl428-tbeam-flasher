@@ -12,27 +12,28 @@
 </script>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/xterm.css">
-<script src="vendor/xterm.js"></script>
-<script src="vendor/xterm-addon-fit.js"></script>
+<script defer src="vendor/xterm.js"></script>
+<script defer src="vendor/xterm-addon-fit.js"></script>
 <style>
   #drop { border: 2px dashed var(--bs-border-color); cursor: pointer; }
   #drop.over { border-color: var(--bs-primary); background: var(--bs-tertiary-bg); }
-  #term { background: var(--bs-tertiary-bg); height: 320px; padding: 6px; overflow: hidden; }
-  #log { height: 200px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
-  #editor { font-size: 13px; min-height: 120px; }
+  .container { max-width: 820px; }
+  #term { height: 320px; }
+  #log { height: 200px; white-space: pre-wrap; font-size: 12px; }
+  #editor { font-size: 13px; }
 </style>
 </head>
 <body>
 <nav class="navbar bg-body-tertiary border-bottom">
-  <div class="container" style="max-width:820px">
+  <div class="container">
     <span class="navbar-brand mb-0 h1">T-Beam Flasher</span>
-    <span class="navbar-text small">ESP32-S3 &middot; Web Serial <span id="pdot" class="badge rounded-pill text-bg-secondary">?</span><span id="ptext" class="visually-hidden">checking browser</span></span>
+    <span class="navbar-text small">ESP32-S3 &middot; Web Serial</span>
   </div>
 </nav>
 
-<main class="container py-4" style="max-width:820px">
+<main class="container py-4">
   <p class="text-center text-body-secondary">Switch a LilyGO T-Beam S3 Supreme between the C factory firmware and MicroPython, or flash your own firmware file.</p>
-  <div class="alert alert-warning" id="nosupport" style="display:none">Web Serial is not available in this browser. Use Chrome, Edge or Opera on desktop, over HTTPS or localhost.</div>
+  <div class="alert alert-warning" id="nosupport" hidden>Web Serial is not available in this browser. Use Chrome, Edge or Opera on desktop, over HTTPS or localhost.</div>
 
   <ul class="nav nav-tabs mb-3" role="tablist">
     <li class="nav-item"><button class="nav-link active" role="tab" id="tab-fw" aria-selected="true" aria-controls="panel-fw">Firmware</button></li>
@@ -97,11 +98,11 @@
         <button class="btn btn-outline-secondary btn-sm" id="repl-reset" disabled>Soft reset (Ctrl-D)</button>
         <button class="btn btn-outline-secondary btn-sm" id="repl-clear">Clear</button>
       </div>
-      <div id="term" class="border rounded" role="log" aria-label="MicroPython terminal"></div>
+      <div id="term" class="border rounded p-2 bg-body-tertiary overflow-hidden" role="log" aria-label="MicroPython terminal"></div>
     </div></div>
     <div class="card mb-3"><div class="card-body">
       <h5 class="card-title">Run code</h5>
-      <textarea class="form-control font-monospace" id="editor" spellcheck="false">import machine, sys
+      <textarea class="form-control font-monospace" id="editor" rows="6" spellcheck="false">import machine, sys
 print(sys.implementation)
 print(machine.freq())</textarea>
       <div class="d-flex gap-2 mt-2">
@@ -144,7 +145,7 @@ print(machine.freq())</textarea>
     <h5 class="card-title">Status <span id="dot" class="badge rounded-pill text-bg-secondary fs-6 ms-1">idle</span></h5>
     <p class="mb-2" id="state">idle</p>
     <div class="progress mb-2" role="progressbar" id="bar" aria-label="Flash progress"><div class="progress-bar" style="width:0%"></div></div>
-    <pre id="log" class="border rounded p-2 bg-body-tertiary font-monospace mb-0" aria-live="polite"></pre>
+    <pre id="log" class="border rounded p-2 bg-body-tertiary font-monospace mb-0 overflow-auto text-break" aria-live="polite"></pre>
   </div></div>
 
   <p class="small text-body-secondary">
@@ -157,37 +158,41 @@ print(machine.freq())</textarea>
 <dialog id="confirm" class="border rounded p-4 bg-body text-body" style="max-width:440px">
   <strong id="confirm-title"></strong>
   <p id="confirm-body" class="mt-2"></p>
-  <div class="d-flex gap-2 justify-content-end">
-    <button class="btn btn-outline-secondary" id="confirm-no" type="button">Cancel</button>
-    <button class="btn btn-primary" id="confirm-yes" type="button">Flash</button>
-  </div>
+  <form method="dialog" class="d-flex gap-2 justify-content-end">
+    <button class="btn btn-outline-secondary" value="no">Cancel</button>
+    <button class="btn btn-primary" value="yes">Flash</button>
+  </form>
 </dialog>
 
 <script type="module">
 import { ESPLoader, Transport } from "./vendor/esptool-js.bundle.js";
 
 const $ = (id) => document.getElementById(id);
+const MIB = 1 << 20, FLASH_BYTES = 8 * MIB, CHIP_ID = 9;
+const hasSerial = "serial" in navigator;
 const logEl = $("log");
-Object.defineProperty($("bar"), "value", { set(v) { this.firstElementChild.style.width = v + "%"; } });
+const toHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+const setBar = (pct) => { $("bar").firstElementChild.style.width = pct + "%"; };
+$("nosupport").hidden = hasSerial;
 
 function log(msg, cls = "") {
   const line = document.createElement("div");
-  if (cls) line.className = { e: "text-danger", w: "text-warning-emphasis", o: "text-success" }[cls] || "";
+  line.className = cls;
   line.textContent = msg;
-  logEl.appendChild(line);
+  logEl.append(line);
   logEl.scrollTop = logEl.scrollHeight;
 }
-const BADGE = { ok: "success", busy: "warning", err: "danger" };
-const badge = (kind) => "badge rounded-pill text-bg-" + (BADGE[kind] || "secondary");
-const KIND_TEXT = { ok: "done", busy: "working", err: "error" };
-function setState(text, kind = "") {
+const STATUS = { ok: ["success", "done"], busy: ["warning", "working"], err: ["danger", "error"] };
+function setState(text, kind) {
+  const [color, label] = STATUS[kind] || ["secondary", "idle"];
   $("state").textContent = text;
-  $("dot").className = badge(kind); $("dot").textContent = KIND_TEXT[kind] || "idle";
+  $("dot").className = "badge rounded-pill fs-6 ms-1 text-bg-" + color;
+  $("dot").textContent = label;
 }
 
+const MD5_K = Uint32Array.from({ length: 64 }, (_, i) => Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296));
+const MD5_S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
 function md5(bytes) {
-  const K = new Uint32Array(64), S = [7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21];
-  for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296);
   const len = bytes.length, padded = new Uint8Array(((len + 8) >> 6 << 6) + 64);
   padded.set(bytes); padded[len] = 0x80;
   const dv = new DataView(padded.buffer);
@@ -204,97 +209,82 @@ function md5(bytes) {
       else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) & 15; }
       else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) & 15; }
       else { F = C ^ (B | ~D); g = (7 * i) & 15; }
-      F = (F + A + K[i] + M[g]) >>> 0;
+      F = (F + A + MD5_K[i] + M[g]) >>> 0;
       A = D; D = C; C = B;
-      const s = S[(i >> 4) * 4 + (i & 3)];
+      const s = MD5_S[(i >> 4) * 4 + (i & 3)];
       B = (B + ((F << s) | (F >>> (32 - s)))) >>> 0;
     }
     a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
   }
   const out = new Uint8Array(16), ov = new DataView(out.buffer);
   ov.setUint32(0, a0, true); ov.setUint32(4, b0, true); ov.setUint32(8, c0, true); ov.setUint32(12, d0, true);
-  return [...out].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return toHex(out);
+}
+
+const sha256hex = async (bytes) => toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
+
+function fillSelect(sel, items) {
+  const prev = sel.value;
+  sel.replaceChildren(...items.map(([value, label]) => new Option(label, value)));
+  if (items.some(([value]) => value === prev)) sel.value = prev;
 }
 
 let catalog = null;
+const selectedMp = () => catalog.micropython.find((x) => x.version === $("mp").value);
 
-async function sha256hex(bytes) {
-  const h = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function fillSelect(sel, items, selected) {
-  sel.replaceChildren(...items.map(([value, label]) => {
-    const o = document.createElement("option");
-    o.value = value; o.textContent = label; return o;
-  }));
-  if (selected !== undefined) sel.value = selected;
-}
-
-function renderMp() {
-  const idf = $("idf").value;
-  const list = catalog.micropython.filter((e) => idf === "any" || e.idf === idf);
-  const current = $("mp").value;
-  fillSelect($("mp"), list.map((e) => [e.version, `v${e.version} (${e.date})`]),
-    list.some((e) => e.version === current) ? current : list[0]?.version);
-  renderInfo();
-}
 function renderInfo() {
-  const e = catalog.micropython.find((x) => x.version === $("mp").value);
-  if (!e) { $("mpinfo").textContent = ""; return; }
-  const same = catalog.micropython.filter((x) => x.idf === e.idf).map((x) => "v" + x.version);
+  const e = selectedMp();
+  const same = catalog.micropython.filter((x) => x.idf === e.idf && x !== e).map((x) => "v" + x.version);
   $("mpinfo").textContent =
     `Compatible ESP-IDF: ${e.idf} (this build was made with it; use it if you compile this version yourself). ` +
-    `Same IDF also used by: ${same.filter((v) => v !== "v" + e.version).join(", ") || "no other bundled release"}. ` +
-    `${(e.size / 1048576).toFixed(2)} MiB.` + (e.note ? ` ${e.note}` : "");
+    `Same IDF also used by: ${same.join(", ") || "no other bundled release"}. ` +
+    `${(e.size / MIB).toFixed(2)} MiB.` + (e.note ? ` ${e.note}` : "");
 }
-function selectedMp() { return catalog.micropython.find((x) => x.version === $("mp").value); }
+function renderMp() {
+  const idf = $("idf").value;
+  fillSelect($("mp"), catalog.micropython.filter((e) => idf === "any" || e.idf === idf).map((e) => [e.version, `v${e.version} (${e.date})`]));
+  renderInfo();
+}
 
 async function init() {
-  if (!("serial" in navigator)) $("nosupport").style.display = "block";
   catalog = await (await fetch("catalog.json", { cache: "no-cache" })).json();
   const idfs = [...new Set(catalog.micropython.map((e) => e.idf))];
-  fillSelect($("idf"), [["any", "any"], ...idfs.map((v) => [v, v])], "any");
+  fillSelect($("idf"), [["any", "any"], ...idfs.map((v) => [v, v])]);
   renderMp();
-  fillSelect($("cimg"), [["factory", catalog.c.name], ["file", "Local .bin file..."]], "factory");
+  fillSelect($("cimg"), [["factory", catalog.c.name], ["file", "Local .bin file..."]]);
   $("idf").addEventListener("change", renderMp);
-  $("mp").addEventListener("change", () => {
-    const e = selectedMp();
-    if ($("idf").value !== "any" && e) $("idf").value = e.idf;
-    renderInfo();
-  });
+  $("mp").addEventListener("change", renderInfo);
   $("cimg").addEventListener("change", () => { $("cfile-wrap").hidden = $("cimg").value !== "file"; });
 }
 
-function confirmDialog(title, body) {
-  return new Promise((resolve) => {
-    const d = $("confirm");
-    $("confirm-title").textContent = title;
-    $("confirm-body").textContent = body;
-    const done = (v) => { d.close(); $("confirm-yes").onclick = $("confirm-no").onclick = null; resolve(v); };
-    $("confirm-yes").onclick = () => done(true);
-    $("confirm-no").onclick = () => done(false);
-    d.addEventListener("cancel", () => done(false), { once: true });
-    d.showModal();
-  });
-}
+const confirmDialog = (title, body) => new Promise((resolve) => {
+  const d = $("confirm");
+  $("confirm-title").textContent = title;
+  $("confirm-body").textContent = body;
+  d.returnValue = "";
+  d.addEventListener("close", () => resolve(d.returnValue === "yes"), { once: true });
+  d.showModal();
+});
 
+let busy = false, dropped = null;
+const syncFileBtn = () => { $("go-file").disabled = busy || !dropped; };
 function setBusy(b) {
-  for (const id of ["go-mp", "go-c", "idf", "mp", "cimg", "baud", "erase", "cfile", "go-file", "dropaddr"]) $(id).disabled = b || (id === "go-file" && !dropped);
+  busy = b;
+  for (const id of ["go-mp", "go-c", "idf", "mp", "cimg", "baud", "erase", "cfile", "dropaddr"]) $(id).disabled = b;
+  syncFileBtn();
 }
 
-let dropped = null;
-function hex(n) { return "0x" + n.toString(16); }
 async function inspectFile(f) {
-  dropped = null; $("go-file").disabled = true;
+  dropped = null; syncFileBtn();
   const data = new Uint8Array(await f.arrayBuffer());
   const notes = [`${f.name}, ${data.length} bytes`];
   let ok = true;
-  if (data.length < 4096) { notes.push("too small to be firmware"); ok = false; }
-  else if (data[0] !== 0xe9) { notes.push("does not start with an ESP image header (0xE9)"); ok = false; }
+  const bad = (msg) => { notes.push(msg); ok = false; };
+  if (data.length < 4096) bad("too small to be firmware");
+  else if (data[0] !== 0xe9) bad("does not start with an ESP image header (0xE9)");
   else {
     const chip = data[12] | (data[13] << 8);
-    if (chip !== 9) { notes.push(`built for chip id ${chip}, not ESP32-S3 (9). Flashing it would not boot`); ok = false; }
+    if (chip !== CHIP_ID) bad(`built for chip id ${chip}, not ESP32-S3 (${CHIP_ID}). Flashing it would not boot`);
     else notes.push("ESP32-S3 image");
   }
   if (ok) {
@@ -304,38 +294,31 @@ async function inspectFile(f) {
     if (mp) notes.push(mp[0]);
     if (idf) notes.push(`ESP-IDF ${idf[1]}`);
     if (!mp) notes.push("no MicroPython banner found (fine for non-MicroPython firmware)");
-    if (data.length > 8 * 1048576) { notes.push("larger than the 8 MB flash"); ok = false; }
+    if (data.length > FLASH_BYTES) bad("larger than the 8 MB flash");
   }
   $("dropinfo").textContent = notes.join(" | ");
-  if (ok) { dropped = { name: f.name, data }; $("go-file").disabled = false; }
+  if (ok) dropped = { name: f.name, data, sha: (await sha256hex(data)).slice(0, 16) };
+  syncFileBtn();
 }
 function takeFile(f) { if (f) { $("tab-fw").click(); inspectFile(f); } }
 $("drop").addEventListener("click", () => $("dropfile").click());
 $("drop").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("dropfile").click(); } });
 $("dropfile").addEventListener("change", () => takeFile($("dropfile").files[0]));
-for (const ev of ["dragenter", "dragover"]) window.addEventListener(ev, (e) => { e.preventDefault(); $("drop").classList.add("over"); });
-for (const ev of ["dragleave", "drop"]) window.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "drop" || e.target === document.documentElement) $("drop").classList.remove("over"); });
-window.addEventListener("drop", (e) => takeFile(e.dataTransfer?.files?.[0]));
+const over = (on) => $("drop").classList.toggle("over", on);
+for (const ev of ["dragenter", "dragover"]) window.addEventListener(ev, (e) => { e.preventDefault(); over(true); });
+window.addEventListener("dragleave", (e) => { e.preventDefault(); if (e.target === document.documentElement) over(false); });
+window.addEventListener("drop", (e) => { e.preventDefault(); over(false); takeFile(e.dataTransfer.files[0]); });
 
-async function loadImage(kind) {
-  if (kind === "file") {
-    if (!dropped) throw new Error("drop a firmware file first");
-    const m = /^(0x[0-9a-f]+|\d+)$/i.exec($("dropaddr").value.trim());
-    if (!m) throw new Error("flash address must be a number like 0x0");
-    const address = Number(m[1]);
-    if (address % 4096) throw new Error("flash address must be a multiple of 0x1000");
-    if (address + dropped.data.length > 8 * 1048576) throw new Error("file does not fit in 8 MB flash at that address");
-    log(`using ${dropped.name} at ${hex(address)}, sha256 ${(await sha256hex(dropped.data)).slice(0, 16)}...`);
-    return { data: dropped.data, address, label: dropped.name };
-  }
-  if (kind === "mp") {
-    const e = selectedMp();
-    log(`fetching ${e.file}`);
-    const buf = new Uint8Array(await (await fetch(e.file)).arrayBuffer());
-    if (buf.length !== e.size || (await sha256hex(buf)) !== e.sha256) throw new Error("bundled image failed its sha256 check");
-    log(`sha256 ok (${buf.length} bytes)`, "o");
-    return { data: buf, address: 0, label: `MicroPython v${e.version}` };
-  }
+async function loadMp() {
+  const e = selectedMp();
+  log(`fetching ${e.file}`);
+  const buf = new Uint8Array(await (await fetch(e.file)).arrayBuffer());
+  if (buf.length !== e.size || (await sha256hex(buf)) !== e.sha256) throw new Error("bundled image failed its sha256 check");
+  log(`sha256 ok (${buf.length} bytes)`, "text-success");
+  return { data: buf, address: 0, label: `MicroPython v${e.version}` };
+}
+
+async function loadC() {
   if ($("cimg").value === "file") {
     const f = $("cfile").files[0];
     if (!f) throw new Error("choose a .bin file first");
@@ -345,40 +328,54 @@ async function loadImage(kind) {
   const res = await fetch(catalog.c.url);
   if (!res.ok) throw new Error(`factory image download failed (HTTP ${res.status}). Use a local .bin instead.`);
   const buf = new Uint8Array(await res.arrayBuffer());
-  log(`got ${buf.length} bytes`, "o");
+  log(`got ${buf.length} bytes`, "text-success");
   return { data: buf, address: catalog.c.address, label: "LilyGO factory (C)" };
 }
 
+async function loadFile() {
+  const m = /^(0x[0-9a-f]+|\d+)$/i.exec($("dropaddr").value.trim());
+  if (!m) throw new Error("flash address must be a number like 0x0");
+  const address = Number(m[1]);
+  if (address % 4096) throw new Error("flash address must be a multiple of 0x1000");
+  if (address + dropped.data.length > FLASH_BYTES) throw new Error("file does not fit in 8 MB flash at that address");
+  log(`using ${dropped.name} at 0x${address.toString(16)}, sha256 ${dropped.sha}...`);
+  return { data: dropped.data, address, label: dropped.name };
+}
+
+const SOURCES = {
+  mp: { target: () => `MicroPython v${selectedMp().version}`, load: loadMp,
+        done: "MicroPython is running. Open it with Thonny or: mpremote repl" },
+  c: { target: () => "the C factory image", load: loadC,
+       done: "C factory image is running. The screen should show text." },
+  file: { target: () => `your file ${dropped.name}`, load: loadFile,
+          done: "Your firmware was written. If it is MicroPython, open it with Thonny or: mpremote repl" },
+};
+
 async function run(kind) {
-  if (!("serial" in navigator)) { log("Web Serial unavailable", "e"); return; }
-  let image;
+  if (!hasSerial) { log("Web Serial unavailable", "text-danger"); return; }
+  const src = SOURCES[kind];
+  let transport;
   try {
-    const target = kind === "mp" ? `MicroPython v${selectedMp().version}`
-      : kind === "file" ? `your file ${dropped?.name ?? ""}` : "the C factory image";
-    const ok = await confirmDialog(`Flash ${target}?`,
+    const ok = await confirmDialog(`Flash ${src.target()}?`,
       ($("erase").checked ? "The whole flash is erased first, including any files on the board. " : "") +
       "Do not unplug the board until it finishes.");
     if (!ok) return;
     await replDisconnect();
-    setBusy(true); logEl.replaceChildren(); $("bar").value = 0;
+    setBusy(true); logEl.replaceChildren(); setBar(0);
     setState("loading image", "busy");
-    image = await loadImage(kind);
-  } catch (err) { log(String(err.message || err), "e"); setState("failed", "err"); setBusy(false); return; }
+    const image = await src.load();
 
-  let transport;
-  try {
     setState("choose a port", "busy");
-    const port = await navigator.serial.requestPort();
-    transport = new Transport(port, false);
+    transport = new Transport(await navigator.serial.requestPort(), false);
     const loader = new ESPLoader({
-      transport, baudrate: Number($("baud").value), romBaudrate: 115200,
+      transport, baudrate: Number($("baud").value),
       terminal: { clean() {}, write: (m) => log(m), writeLine: (m) => log(m) },
     });
     setState("connecting", "busy");
     const chip = await loader.main();
-    log(`connected: ${chip}`, "o");
-    if (!/ESP32-S3/i.test(chip)) {
-      log(`this is not an ESP32-S3 (${chip}); refusing to flash`, "e");
+    log(`connected: ${chip}`, "text-success");
+    if (!/^ESP32-S3\b/.test(chip)) {
+      log(`this is not an ESP32-S3 (${chip}); refusing to flash`, "text-danger");
       setState("wrong chip", "err");
       return;
     }
@@ -387,73 +384,76 @@ async function run(kind) {
       fileArray: [{ data: image.data, address: image.address }],
       flashSize: "keep", flashMode: "keep", flashFreq: "keep",
       eraseAll: $("erase").checked, compress: true,
-      reportProgress: (_i, written, total) => { $("bar").value = Math.round((written / total) * 100); },
-      calculateMD5Hash: (img) => md5(img),
+      reportProgress: (_i, written, total) => setBar(Math.round((written / total) * 100)),
+      calculateMD5Hash: md5,
     });
-    $("bar").value = 100;
-    log("write finished, resetting board", "o");
+    setBar(100);
+    log("write finished, resetting board", "text-success");
     await loader.after("hard_reset");
     setState("done. replug USB if the port does not return", "ok");
-    log(kind === "mp" ? "MicroPython is running. Open it with Thonny or: mpremote repl"
-      : kind === "file" ? "Your firmware was written. If it is MicroPython, open it with Thonny or: mpremote repl"
-      : "C factory image is running. The screen should show text.", "o");
+    log(src.done, "text-success");
   } catch (err) {
-    log(String(err && err.message || err), "e");
+    log(String(err?.message || err), "text-danger");
     setState("failed", "err");
   } finally {
     try { await transport?.disconnect(); } catch {}
     setBusy(false);
   }
 }
+for (const kind of Object.keys(SOURCES)) $("go-" + kind).addEventListener("click", () => run(kind));
 
-$("go-mp").addEventListener("click", () => run("mp"));
-$("go-c").addEventListener("click", () => run("c"));
-$("go-file").addEventListener("click", () => run("file"));
 const repl = { port: null, writer: null, reader: null };
 const enc = new TextEncoder();
-const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const term = new Terminal({ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13, cursorBlink: true, convertEol: false, scrollback: 5000,
-  theme: { background: css("--bs-tertiary-bg"), foreground: css("--bs-body-color"), cursor: css("--bs-primary"), selectionBackground: css("--bs-border-color") } });
-const fit = new FitAddon.FitAddon();
-term.loadAddon(fit); term.open($("term"));
-const refit = () => { try { fit.fit(); } catch {} };
-window.addEventListener("resize", refit);
-function termWrite(chunk) { term.write(chunk); }
-term.onData((d) => { if (repl.writer) repl.writer.write(enc.encode(d)); });
+let term, fit;
+function ensureTerm() {
+  if (term) return;
+  const cs = getComputedStyle(document.documentElement);
+  const color = (v) => cs.getPropertyValue(v).trim();
+  term = new Terminal({ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13, cursorBlink: true, scrollback: 5000,
+    theme: { background: color("--bs-tertiary-bg"), foreground: color("--bs-body-color"), cursor: color("--bs-primary"), selectionBackground: color("--bs-border-color") } });
+  fit = new FitAddon.FitAddon();
+  term.loadAddon(fit); term.open($("term"));
+  term.onData(send);
+  new ResizeObserver(() => { try { fit.fit(); } catch {} }).observe($("term"));
+}
+const out = (chunk) => term?.write(chunk);
 async function send(str) { if (repl.writer) await repl.writer.write(enc.encode(str)); }
 function setReplUi(on) {
   $("repl-connect").textContent = on ? "Disconnect" : "Connect";
   for (const id of ["repl-int", "repl-reset", "repl-run", "repl-save"]) $(id).disabled = !on;
 }
-async function replDisconnect() {
-  const r = repl; if (!r.port) return;
-  repl.port = null;
-  try { await r.reader?.cancel(); } catch {}
-  try { r.writer?.releaseLock(); } catch {}
-  try { await r.port0.close(); } catch {}
-  repl.writer = repl.reader = null; setReplUi(false); termWrite("\r\n[disconnected]\r\n");
+async function replDisconnect(msg = "[disconnected]") {
+  const { port, reader, writer } = repl;
+  if (!port) return;
+  repl.port = repl.reader = repl.writer = null;
+  try { await reader?.cancel(); } catch {}
+  try { reader?.releaseLock(); } catch {}
+  try { writer?.releaseLock(); } catch {}
+  try { await port.close(); } catch {}
+  setReplUi(false); out(`\r\n${msg}\r\n`);
+}
+async function pump(port, reader) {
+  try { for (;;) { const { value, done } = await reader.read(); if (done) break; out(value); } }
+  catch {}
+  finally { if (repl.port === port) await replDisconnect("[connection lost]"); }
 }
 async function replConnect() {
   try {
+    ensureTerm();
     const port = await navigator.serial.requestPort();
     await port.open({ baudRate: 115200 });
     try { await port.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch {}
-    repl.port = port; repl.port0 = port;
-    repl.writer = port.writable.getWriter(); repl.reader = port.readable.getReader();
-    setReplUi(true); termWrite("[connected]\r\n"); term.focus();
-    (async () => {
-      try { for (;;) { const { value, done } = await repl.reader.read(); if (done) break; termWrite(value); } }
-      catch {}
-      finally { if (repl.port) { repl.port = null; try { repl.writer?.releaseLock(); } catch {} try { await port.close(); } catch {} repl.writer = repl.reader = null; setReplUi(false); termWrite("\r\n[connection lost]\r\n"); } }
-    })();
+    Object.assign(repl, { port, writer: port.writable.getWriter(), reader: port.readable.getReader() });
+    setReplUi(true); out("[connected]\r\n"); term.focus();
+    pump(port, repl.reader);
     await send("\x03\x03");
-  } catch (e) { termWrite(`[could not connect: ${e.message}]\r\n`); }
+  } catch (e) { out(`[could not connect: ${e.message}]\r\n`); }
 }
 $("repl-connect").addEventListener("click", () => (repl.port ? replDisconnect() : replConnect()));
 $("repl-int").addEventListener("click", () => send("\x03"));
 $("repl-reset").addEventListener("click", () => send("\x04"));
-$("repl-clear").addEventListener("click", () => term.clear());
-async function pasteMode(code) { await send("\x03\x03\x02\x05" + code.replace(/\r?\n/g, "\r") + "\x04"); }
+$("repl-clear").addEventListener("click", () => term?.clear());
+const pasteMode = (code) => send("\x03\x03\x02\x05" + code.replace(/\r?\n/g, "\r") + "\x04");
 $("repl-run").addEventListener("click", () => pasteMode($("editor").value));
 $("repl-save").addEventListener("click", () =>
   pasteMode(`f = open('main.py', 'w')\nf.write(${JSON.stringify($("editor").value)})\nf.close()\nprint('saved main.py')`));
@@ -463,15 +463,12 @@ for (const [tab] of TABS) {
   $(tab).addEventListener("click", () => {
     for (const [t, p] of TABS) { $(t).setAttribute("aria-selected", String(t === tab)); $(t).classList.toggle("active", t === tab); $(p).hidden = t !== tab; }
     try { localStorage.setItem("tab", tab); } catch {}
-    if (tab === "tab-repl") requestAnimationFrame(refit);
+    if (tab === "tab-repl") ensureTerm();
   });
 }
 if (location.hash === "#repl") $("tab-repl").click();
-else try { const t = localStorage.getItem("tab"); if (t === "tab-repl") $(t).click(); } catch {}
-{ const ok = "serial" in navigator;
-  $("ptext").textContent = ok ? "Web Serial ready" : "Web Serial unavailable";
-  $("pdot").className = badge(ok ? "ok" : "err"); $("pdot").textContent = ok ? "ready" : "no"; }
-init().catch((e) => { log("could not load catalog.json: " + e.message, "e"); setState("failed", "err"); });
+else try { if (localStorage.getItem("tab") === "tab-repl") $("tab-repl").click(); } catch {}
+init().catch((e) => { log("could not load catalog.json: " + e.message, "text-danger"); setState("failed", "err"); });
 </script>
 </body>
 </html>
