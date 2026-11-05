@@ -5,255 +5,161 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>T-Beam Flasher</title>
 <meta name="description" content="Switch a LilyGO T-Beam S3 Supreme between the C factory firmware and MicroPython from the browser, over Web Serial.">
+<script>
+  const mq = matchMedia("(prefers-color-scheme: dark)");
+  const applyTheme = () => document.documentElement.setAttribute("data-bs-theme", mq.matches ? "dark" : "light");
+  applyTheme(); mq.addEventListener("change", applyTheme);
+</script>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/xterm.css">
 <script src="vendor/xterm.js"></script>
 <script src="vendor/xterm-addon-fit.js"></script>
 <style>
-:root {
-  --bg: #f6f7f5; --panel: #ffffff; --fg: #1a1d1a; --dim: #5d635c; --line: #dfe2dc; --soft: #f0f2ee;
-  --accent: #17794a; --accent-fg: #ffffff; --warn: #9a5b00; --err: #b3261e; --ok: #17794a;
-  --log-bg: #f0f2ee; --shadow: 0 1px 2px rgba(20,30,20,.06), 0 4px 14px rgba(20,30,20,.05);
-  --mono: "JetBrains Mono", ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
-  --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #101310; --panel: #181c18; --fg: #e4e8e2; --dim: #98a094; --line: #2b312b; --soft: #202620;
-    --accent: #5fcf94; --accent-fg: #0c110d; --warn: #e0a93c; --err: #ff8a7d; --ok: #5fcf94;
-    --log-bg: #0e110e; --shadow: none;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #101310; --panel: #181c18; --fg: #e4e8e2; --dim: #98a094; --line: #2b312b; --soft: #202620;
-  --accent: #5fcf94; --accent-fg: #0c110d; --warn: #e0a93c; --err: #ff8a7d; --ok: #5fcf94;
-  --log-bg: #0e110e; --shadow: none;
-}
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
-html { background: var(--bg); }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans); }
-a { color: var(--accent); }
-code { font-family: var(--mono); font-size: 12px; background: var(--soft); padding: 1px 5px; border-radius: 4px; }
-
-.appbar { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
-.appbar-in { max-width: 760px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; letter-spacing: -.01em; }
-.logo { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; }
-.logo svg { width: 16px; height: 16px; }
-.tag { font: 500 11px var(--mono); color: var(--dim); background: var(--soft); border-radius: 999px; padding: 2px 8px; }
-.spacer { flex: 1; }
-.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
-.pill .dot { width: 7px; height: 7px; }
-
-.wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-.lead { margin: 0; color: var(--dim); text-align: center; }
-.banner { grid-column: 1 / -1; border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--fg); padding: 10px 14px; border-radius: 10px; display: none; }
-
-.tabs { display: flex; width: 100%; gap: 4px; background: var(--soft); border-radius: 10px; padding: 4px; margin: 0 0 16px; }
-.tab { flex: 1; border: 0; background: transparent; color: var(--dim); font: 600 13px var(--sans); padding: 8px 14px; border-radius: 7px; cursor: pointer; min-height: 0; }
-.tab[aria-selected="true"] { background: var(--panel); color: var(--fg); box-shadow: var(--shadow); }
-
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 0 0 16px; box-shadow: var(--shadow); }
-h2 { font-size: 13px; margin: 0 0 12px; font-weight: 700; }
-.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin: 0 0 12px; }
-.row:last-child { margin-bottom: 0; }
-label.f { display: flex; flex-direction: column; gap: 5px; color: var(--dim); font-size: 12px; font-weight: 500; min-width: 160px; flex: 1 1 160px; }
-.note { color: var(--dim); font-size: 13px; margin: 0 0 14px; }
-input[type=text], input[type=password], select, input[type=file] {
-  font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line);
-  padding: 7px 10px; border-radius: 8px; min-height: 36px; width: 100%;
-}
-select:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-button {
-  font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--fg);
-  padding: 9px 14px; border-radius: 8px; min-height: 38px;
-}
-button.primary { min-height: 44px; font-size: 14px; background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-button:hover:not(:disabled) { filter: brightness(.96); }
-button:disabled { opacity: .45; cursor: not-allowed; }
-
-.targets { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-@media (max-width: 640px) { .targets { grid-template-columns: 1fr; } }
-.target { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--panel); }
-.target > label.f { flex: 0 0 auto; }
-.target h3 { margin: 0; font-size: 14px; }
-.target p { margin: 0; color: var(--dim); font-size: 12px; }
-.target .grow { flex: 1; }
-.arrow { color: var(--accent); }
-.check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
-.check input { accent-color: var(--accent); width: 16px; height: 16px; min-height: 0; }
-
-.status { display: flex; gap: 8px; align-items: flex-start; min-height: 22px; font-size: 13px; }
-.dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--dim); display: inline-block; }
-.dot.ok { background: var(--ok); } .dot.busy { background: var(--warn); } .dot.err { background: var(--err); }
-progress { appearance: none; -webkit-appearance: none; width: 100%; height: 8px; border: 0; border-radius: 4px; margin: 10px 0; background: var(--soft); overflow: hidden; }
-progress::-webkit-progress-bar { background: var(--soft); border-radius: 4px; }
-progress::-webkit-progress-value { background: var(--accent); border-radius: 4px; transition: width .2s; }
-progress::-moz-progress-bar { background: var(--accent); border-radius: 4px; }
-#log {
-  font-family: var(--mono); background: var(--log-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px;
-  height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0;
-}
-#log .e { color: var(--err); } #log .w { color: var(--warn); } #log .o { color: var(--ok); }
-details { color: var(--dim); font-size: 13px; margin-top: 12px; }
-summary { cursor: pointer; color: var(--fg); font-weight: 500; }
-details ul { margin: 8px 0 0; padding-left: 18px; }
-dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); padding: 22px; max-width: 440px; border-radius: 14px; font: inherit; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
-dialog::backdrop { background: rgba(0,0,0,.45); }
-dialog .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
-#drop { border: 2px dashed var(--line); border-radius: 12px; padding: 22px 14px; text-align: center; color: var(--dim); cursor: pointer; background: var(--soft); }
-#drop.over { border-color: var(--accent); color: var(--fg); }
-#drop strong { color: var(--fg); }
-.drop-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-top: 12px; }
-#term { background: var(--log-bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px; height: 320px; overflow: hidden; }
-#term .xterm-viewport { background: transparent !important; }
-#term:focus-within { border-color: var(--accent); }
-#editor { width: 100%; min-height: 120px; font-family: var(--mono); font-size: 12px; color: var(--fg); background: var(--panel);
-  border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; }
-.bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
-.bar button { min-height: 34px; padding: 6px 12px; }
-footer { grid-column: 1 / -1; color: var(--dim); font-size: 12px; }
+  #drop { border: 2px dashed var(--bs-border-color); cursor: pointer; }
+  #drop.over { border-color: var(--bs-primary); background: var(--bs-tertiary-bg); }
+  #term { background: var(--bs-tertiary-bg); height: 320px; padding: 6px; overflow: hidden; }
+  #log { height: 200px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+  #editor { font-size: 13px; min-height: 120px; }
 </style>
 </head>
 <body>
-<header class="appbar"><div class="appbar-in">
-  <div class="brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></span>T-Beam Flasher</div>
-  <span class="tag">ESP32-S3</span>
-  <span class="spacer"></span>
-  <span class="pill" id="serialpill"><span class="dot" id="pdot"></span><span id="ptext">checking browser</span></span>
-</div></header>
+<nav class="navbar bg-body-tertiary border-bottom">
+  <div class="container" style="max-width:820px">
+    <span class="navbar-brand mb-0 h1">T-Beam Flasher</span>
+    <span class="navbar-text small">ESP32-S3 &middot; Web Serial <span id="pdot" class="badge rounded-pill text-bg-secondary">?</span><span id="ptext" class="visually-hidden">checking browser</span></span>
+  </div>
+</nav>
 
-<main class="wrap">
-  <p class="lead">Switch a LilyGO T-Beam S3 Supreme between the C factory firmware and MicroPython, or drop in your own firmware file. Runs in the browser over Web Serial.</p>
-  <div class="banner" id="nosupport">Web Serial is not available in this browser. Use Chrome, Edge or Opera on desktop, over HTTPS or localhost.</div>
+<main class="container py-4" style="max-width:820px">
+  <p class="text-center text-body-secondary">Switch a LilyGO T-Beam S3 Supreme between the C factory firmware and MicroPython, or flash your own firmware file.</p>
+  <div class="alert alert-warning" id="nosupport" style="display:none">Web Serial is not available in this browser. Use Chrome, Edge or Opera on desktop, over HTTPS or localhost.</div>
 
-  <div>
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" id="tab-fw" aria-selected="true" aria-controls="panel-fw">Firmware</button>
-      <button class="tab" role="tab" id="tab-repl" aria-selected="false" aria-controls="panel-repl">MicroPython REPL</button>
-    </div>
+  <ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item"><button class="nav-link active" role="tab" id="tab-fw" aria-selected="true" aria-controls="panel-fw">Firmware</button></li>
+    <li class="nav-item"><button class="nav-link" role="tab" id="tab-repl" aria-selected="false" aria-controls="panel-repl">MicroPython REPL</button></li>
+  </ul>
 
-    <div id="panel-fw" role="tabpanel" aria-labelledby="tab-fw">
-      <div class="card">
-        <h2>Choose a direction</h2>
-    <div class="targets">
-      <div class="target">
-        <h3>C <span class="arrow">&rarr;</span> MicroPython</h3>
-        <p class="grow">Writes a MicroPython build for the ESP32-S3 at flash address 0.</p>
-        <div class="row">
-          <label class="f">ESP-IDF version
-            <select id="idf"></select>
-          </label>
-          <label class="f">MicroPython version
-            <select id="mp"></select>
-          </label>
-        </div>
-        <p id="mpinfo"></p>
-        <button class="primary" id="go-mp">Flash MicroPython</button>
+  <div id="panel-fw" role="tabpanel" aria-labelledby="tab-fw">
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <div class="card h-100"><div class="card-body d-flex flex-column gap-2">
+          <h5 class="card-title">MicroPython</h5>
+          <p class="card-text text-body-secondary small">Writes a MicroPython build for the ESP32-S3 at flash address 0.</p>
+          <label class="form-label mb-0" for="idf">ESP-IDF version</label>
+          <select class="form-select" id="idf"></select>
+          <label class="form-label mb-0" for="mp">MicroPython version</label>
+          <select class="form-select" id="mp"></select>
+          <p class="small text-body-secondary mb-0 flex-grow-1" id="mpinfo"></p>
+          <button class="btn btn-primary" id="go-mp">Flash MicroPython</button>
+        </div></div>
       </div>
-      <div class="target">
-        <h3>MicroPython <span class="arrow">&rarr;</span> C</h3>
-        <p class="grow">Restores the LilyGO factory image (the C demo that shows text on the screen). Fetched from the LilyGO repo at flash time.</p>
-        <label class="f">Image
-          <select id="cimg"></select>
-        </label>
-        <label class="f" id="cfile-wrap" hidden>Local .bin (written at 0x0)
-          <input type="file" id="cfile" accept=".bin">
-        </label>
-        <button class="primary" id="go-c">Flash C factory</button>
-      </div>
-    </div>
-      </div>
-          <div class="card">
-        <h2>Your own firmware file</h2>
-        <div id="drop" tabindex="0" role="button" aria-label="Choose or drop a firmware .bin file">
-          <strong>Drop a .bin here</strong> or click to choose.<br>Custom MicroPython, a merged image, or any ESP32-S3 firmware.
-          <input type="file" id="dropfile" accept=".bin" hidden>
-        </div>
-        <p class="note" id="dropinfo" style="margin:10px 0 0">No file chosen. You can also drop a file anywhere on this page.</p>
-        <div class="drop-row">
-          <label class="f" style="max-width:200px">Flash address
-            <input type="text" id="dropaddr" value="0x0" spellcheck="false">
-          </label>
-          <button class="primary" id="go-file" disabled>Flash this file</button>
-        </div>
+      <div class="col-md-6">
+        <div class="card h-100"><div class="card-body d-flex flex-column gap-2">
+          <h5 class="card-title">C factory firmware</h5>
+          <p class="card-text text-body-secondary small flex-grow-1">Restores the LilyGO factory image (the C demo that shows text on the screen). Fetched from the LilyGO repo at flash time.</p>
+          <label class="form-label mb-0" for="cimg">Image</label>
+          <select class="form-select" id="cimg"></select>
+          <div id="cfile-wrap" hidden>
+            <label class="form-label mb-0" for="cfile">Local .bin (written at 0x0)</label>
+            <input class="form-control" type="file" id="cfile" accept=".bin">
+          </div>
+          <button class="btn btn-primary" id="go-c">Flash C factory</button>
+        </div></div>
       </div>
     </div>
 
-    <div id="panel-repl" role="tabpanel" aria-labelledby="tab-repl" hidden>
-      <div class="card">
-        <h2>Board REPL</h2>
-        <p class="note">Talk to MicroPython on the board over Web Serial. Click the terminal and type. Opening the port can reset the board.
-          Close this connection before flashing (flashing does it for you). For a full editor with a file manager, open
-          <a href="https://viper-ide.org" target="_blank" rel="noopener">ViperIDE</a> (MIT, runs in the browser).</p>
-        <div class="bar">
-          <button class="primary" id="repl-connect">Connect</button>
-          <button id="repl-int" disabled>Interrupt (Ctrl-C)</button>
-          <button id="repl-reset" disabled>Soft reset (Ctrl-D)</button>
-          <button id="repl-clear">Clear</button>
-        </div>
-        <div id="term" tabindex="0" role="log" aria-label="MicroPython terminal"></div>
+    <div class="card mb-3"><div class="card-body">
+      <h5 class="card-title">Your own firmware file</h5>
+      <div id="drop" class="rounded p-4 text-center text-body-secondary" tabindex="0" role="button" aria-label="Choose or drop a firmware .bin file">
+        <strong class="text-body">Drop a .bin here</strong> or click to choose.<br>Custom MicroPython, a merged image, or any ESP32-S3 firmware.
+        <input type="file" id="dropfile" accept=".bin" hidden>
       </div>
-      <div class="card">
-        <h2>Run code</h2>
-        <textarea id="editor" spellcheck="false">import machine, sys
+      <p class="small text-body-secondary mt-2 mb-3" id="dropinfo">No file chosen. You can also drop a file anywhere on this page.</p>
+      <div class="d-flex gap-3 align-items-end flex-wrap">
+        <div style="max-width:200px">
+          <label class="form-label" for="dropaddr">Flash address</label>
+          <input class="form-control" type="text" id="dropaddr" value="0x0" spellcheck="false">
+        </div>
+        <button class="btn btn-primary" id="go-file" disabled>Flash this file</button>
+      </div>
+    </div></div>
+  </div>
+
+  <div id="panel-repl" role="tabpanel" aria-labelledby="tab-repl" hidden>
+    <div class="card mb-3"><div class="card-body">
+      <h5 class="card-title">Board REPL</h5>
+      <p class="small text-body-secondary">Talk to MicroPython on the board over Web Serial. Click the terminal and type. Opening the port can reset the board.
+        Close this connection before flashing (flashing does it for you). For a full editor with a file manager, open
+        <a href="https://viper-ide.org" target="_blank" rel="noopener">ViperIDE</a>.</p>
+      <div class="d-flex gap-2 flex-wrap mb-2">
+        <button class="btn btn-primary btn-sm" id="repl-connect">Connect</button>
+        <button class="btn btn-outline-secondary btn-sm" id="repl-int" disabled>Interrupt (Ctrl-C)</button>
+        <button class="btn btn-outline-secondary btn-sm" id="repl-reset" disabled>Soft reset (Ctrl-D)</button>
+        <button class="btn btn-outline-secondary btn-sm" id="repl-clear">Clear</button>
+      </div>
+      <div id="term" class="border rounded" role="log" aria-label="MicroPython terminal"></div>
+    </div></div>
+    <div class="card mb-3"><div class="card-body">
+      <h5 class="card-title">Run code</h5>
+      <textarea class="form-control font-monospace" id="editor" spellcheck="false">import machine, sys
 print(sys.implementation)
 print(machine.freq())</textarea>
-        <div class="bar" style="margin-top:10px">
-          <button class="primary" id="repl-run" disabled>Run on board</button>
-          <button id="repl-save" disabled>Save as main.py</button>
-        </div>
-        <p class="note" style="margin:0">Run uses paste mode, so multi-line code works. Save writes the editor text to <code>main.py</code>, which runs at boot.</p>
+      <div class="d-flex gap-2 mt-2">
+        <button class="btn btn-primary btn-sm" id="repl-run" disabled>Run on board</button>
+        <button class="btn btn-outline-secondary btn-sm" id="repl-save" disabled>Save as main.py</button>
       </div>
-    </div>
+      <p class="small text-body-secondary mt-2 mb-0">Run uses paste mode, so multi-line code works. Save writes the editor text to <code>main.py</code>, which runs at boot.</p>
+    </div></div>
+  </div>
 
-    <div class="card">
-      <h2>Settings</h2>
-    <div class="row">
-      <label class="f">Baud rate
-        <select id="baud">
+  <div class="card mb-3"><div class="card-body">
+    <h5 class="card-title">Settings</h5>
+    <div class="row g-3 align-items-end">
+      <div class="col-sm-5">
+        <label class="form-label" for="baud">Baud rate</label>
+        <select class="form-select" id="baud">
           <option value="115200">115200</option>
           <option value="230400">230400</option>
           <option value="460800" selected>460800</option>
           <option value="921600">921600</option>
         </select>
-      </label>
-      <label class="check"><input type="checkbox" id="erase" checked> erase all flash first (recommended when switching)</label>
+      </div>
+      <div class="col-sm-7"><div class="form-check">
+        <input class="form-check-input" type="checkbox" id="erase" checked>
+        <label class="form-check-label" for="erase">Erase all flash first (recommended when switching)</label>
+      </div></div>
     </div>
-    <details>
-      <summary>If the board is not found</summary>
-      <ul>
+    <details class="mt-3 small text-body-secondary">
+      <summary class="text-body">If the board is not found</summary>
+      <ul class="mt-2 mb-0">
         <li>The ESP32-S3 USB port resets itself into the bootloader. If connecting fails, hold <code>BOOT</code> while plugging in USB, then try again.</li>
         <li>After flashing, the page resets the board. Unplug and replug if the port does not come back.</li>
         <li>Close Thonny, <code>mpremote</code>, a serial monitor or any other tab that holds the port.</li>
         <li>Linux: your user needs the <code>uucp</code> or <code>dialout</code> group for <code>/dev/ttyACM0</code>.</li>
       </ul>
     </details>
-    </div>
-  </div>
+  </div></div>
 
-  <aside class="activity">
-    <div class="card">
-      <h2>Activity</h2>
-    <div class="status"><span class="dot" id="dot"></span><span id="state">idle</span></div>
-    <progress id="bar" max="100" value="0"></progress>
-    <pre id="log" aria-live="polite"></pre>
-    </div>
-  </aside>
+  <div class="card mb-3"><div class="card-body">
+    <h5 class="card-title">Status <span id="dot" class="badge rounded-pill text-bg-secondary fs-6 ms-1">idle</span></h5>
+    <p class="mb-2" id="state">idle</p>
+    <div class="progress mb-2" role="progressbar" id="bar" aria-label="Flash progress"><div class="progress-bar" style="width:0%"></div></div>
+    <pre id="log" class="border rounded p-2 bg-body-tertiary font-monospace mb-0" aria-live="polite"></pre>
+  </div></div>
 
-  <footer>
-    Flashing uses <a href="https://github.com/espressif/esptool-js">esptool-js</a> (Apache-2.0). MicroPython builds are the official
-    <code>ESP32_GENERIC_S3</code> releases from micropython.org (MIT). The REPL terminal is <a href="https://xtermjs.org">xterm.js</a> (MIT). The C image belongs to LilyGO and is not redistributed here.
-    Flashing erases the board. Back up anything you need first.
-  </footer>
+  <p class="small text-body-secondary">
+    Flashing uses <a href="https://github.com/espressif/esptool-js">esptool-js</a> (Apache-2.0), the terminal is <a href="https://xtermjs.org">xterm.js</a> (MIT),
+    the layout is <a href="https://getbootstrap.com">Bootstrap</a> (MIT). MicroPython builds are the official <code>ESP32_GENERIC_S3</code> releases from micropython.org (MIT).
+    The C image belongs to LilyGO and is not redistributed here. Flashing erases the board. Back up anything you need first.
+  </p>
 </main>
 
-<dialog id="confirm">
+<dialog id="confirm" class="border rounded p-4 bg-body text-body" style="max-width:440px">
   <strong id="confirm-title"></strong>
-  <p id="confirm-body"></p>
-  <div class="actions">
-    <button id="confirm-no" type="button">Cancel</button>
-    <button id="confirm-yes" type="button" class="primary">Flash</button>
+  <p id="confirm-body" class="mt-2"></p>
+  <div class="d-flex gap-2 justify-content-end">
+    <button class="btn btn-outline-secondary" id="confirm-no" type="button">Cancel</button>
+    <button class="btn btn-primary" id="confirm-yes" type="button">Flash</button>
   </div>
 </dialog>
 
@@ -262,17 +168,21 @@ import { ESPLoader, Transport } from "./vendor/esptool-js.bundle.js";
 
 const $ = (id) => document.getElementById(id);
 const logEl = $("log");
+Object.defineProperty($("bar"), "value", { set(v) { this.firstElementChild.style.width = v + "%"; } });
 
 function log(msg, cls = "") {
   const line = document.createElement("div");
-  if (cls) line.className = cls;
+  if (cls) line.className = { e: "text-danger", w: "text-warning-emphasis", o: "text-success" }[cls] || "";
   line.textContent = msg;
   logEl.appendChild(line);
   logEl.scrollTop = logEl.scrollHeight;
 }
+const BADGE = { ok: "success", busy: "warning", err: "danger" };
+const badge = (kind) => "badge rounded-pill text-bg-" + (BADGE[kind] || "secondary");
+const KIND_TEXT = { ok: "done", busy: "working", err: "error" };
 function setState(text, kind = "") {
   $("state").textContent = text;
-  $("dot").className = "dot " + kind;
+  $("dot").className = badge(kind); $("dot").textContent = KIND_TEXT[kind] || "idle";
 }
 
 // Compact MD5 for esptool-js flash verification (input: Uint8Array, output: hex string).
@@ -506,8 +416,8 @@ $("go-file").addEventListener("click", () => run("file"));
 const repl = { port: null, writer: null, reader: null };
 const enc = new TextEncoder();
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const term = new Terminal({ fontFamily: css("--mono") || "monospace", fontSize: 13, cursorBlink: true, convertEol: false, scrollback: 5000,
-  theme: { background: css("--log-bg"), foreground: css("--fg"), cursor: css("--accent"), selectionBackground: css("--line") } });
+const term = new Terminal({ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13, cursorBlink: true, convertEol: false, scrollback: 5000,
+  theme: { background: css("--bs-tertiary-bg"), foreground: css("--bs-body-color"), cursor: css("--bs-primary"), selectionBackground: css("--bs-border-color") } });
 const fit = new FitAddon.FitAddon();
 term.loadAddon(fit); term.open($("term"));
 const refit = () => { try { fit.fit(); } catch {} };
@@ -555,7 +465,7 @@ $("repl-save").addEventListener("click", () =>
 const TABS = [["tab-fw", "panel-fw"], ["tab-repl", "panel-repl"]];
 for (const [tab] of TABS) {
   $(tab).addEventListener("click", () => {
-    for (const [t, p] of TABS) { $(t).setAttribute("aria-selected", String(t === tab)); $(p).hidden = t !== tab; }
+    for (const [t, p] of TABS) { $(t).setAttribute("aria-selected", String(t === tab)); $(t).classList.toggle("active", t === tab); $(p).hidden = t !== tab; }
     try { localStorage.setItem("tab", tab); } catch {}
     if (tab === "tab-repl") requestAnimationFrame(refit);
   });
@@ -564,7 +474,7 @@ if (location.hash === "#repl") $("tab-repl").click();
 else try { const t = localStorage.getItem("tab"); if (t === "tab-repl") $(t).click(); } catch {}
 { const ok = "serial" in navigator;
   $("ptext").textContent = ok ? "Web Serial ready" : "Web Serial unavailable";
-  $("pdot").className = "dot " + (ok ? "ok" : "err"); }
+  $("pdot").className = badge(ok ? "ok" : "err"); $("pdot").textContent = ok ? "ready" : "no"; }
 init().catch((e) => { log("could not load catalog.json: " + e.message, "e"); setState("failed", "err"); });
 </script>
 </body>

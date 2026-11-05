@@ -48,7 +48,7 @@ The link `#repl` opens that tab directly.
 | `catalog.json` | MicroPython builds (version, ESP-IDF version, sha256) and the C image URL |
 | `firmware/` | official `ESP32_GENERIC_S3` MicroPython releases from micropython.org, plus the microlite build |
 | `examples/` | the microlite sine demo and its model |
-| `vendor/` | [esptool-js](https://github.com/espressif/esptool-js) 0.7.1 (Apache-2.0) and [xterm.js](https://xtermjs.org) 5.5.0 (MIT), with licences |
+| `vendor/` | [esptool-js](https://github.com/espressif/esptool-js) 0.7.1 (Apache-2.0) [xterm.js](https://xtermjs.org) 5.5.0 (MIT) and [Bootstrap](https://getbootstrap.com) 5.3.3 (MIT), with licences |
 
 MicroPython images are checked against their sha256 before writing, and the flash is verified with an
 MD5 check afterwards. The ESP-IDF version of each build is read from the binary itself.
@@ -71,7 +71,7 @@ version, date, ESP-IDF version (`strings file.bin | grep 'IDF version'`), size a
 
 ## Licences
 
-MicroPython is MIT licensed. esptool-js is Apache-2.0 (`vendor/esptool-js.LICENSE`). xterm.js is MIT (`vendor/xterm.LICENSE`).
+MicroPython is MIT licensed. esptool-js is Apache-2.0 (`vendor/esptool-js.LICENSE`). xterm.js is MIT (`vendor/xterm.LICENSE`). Bootstrap is MIT (`vendor/bootstrap.LICENSE`).
 
 ## AI assistance
 
