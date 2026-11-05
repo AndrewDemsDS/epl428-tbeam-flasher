@@ -39,6 +39,15 @@
       "file": "firmware/ESP32_GENERIC_S3-20250415-v1.25.0.bin",
       "size": 1673008,
       "sha256": "3f25a6c4f6fa6d68c8959152c9fa0962c90ef2dab5cccc984e42b5bc5c63fea3"
+    },
+    {
+      "version": "1.19.1 + microlite",
+      "date": "2026-11-05",
+      "idf": "v4.4",
+      "file": "firmware/microlite-MICROLITE_S3-v1.19.1.bin",
+      "size": 1966240,
+      "sha256": "ddce2b4ea78de26a86bc6515e850b010eafe41eefa10ed591be7a4dee188435f",
+      "note": "MicroPython with TensorFlow Lite Micro (microlite) and ulab. Built from mocleiri/tensorflow-micropython-examples at db72b65. Experimental: not yet tested on the board. Old MicroPython (1.19.1); about 130 KB of app space left."
     }
   ],
   "c": {

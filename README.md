@@ -23,6 +23,16 @@ other program that holds the port.
 
 Flashing erases the board (the option is on by default). Files stored on a MicroPython board are lost.
 
+## MicroPython with TensorFlow Lite (microlite)
+
+The MicroPython list includes `1.19.1 + microlite` (ESP-IDF 4.4): MicroPython with TensorFlow Lite for Microcontrollers
+and ulab, built from [mocleiri/tensorflow-micropython-examples](https://github.com/mocleiri/tensorflow-micropython-examples).
+It is **experimental and not yet tested on a board**. It is an old MicroPython (1.19.1) and has about 130 KB of app
+space left. If the REPL does not appear over USB after flashing, flash an official build again.
+
+Try the sine demo in `examples/`: copy `hello_world.py` and `model.tflite` to the root of the board
+(`mpremote cp examples/hello_world.py examples/model.tflite :`), then `import hello_world` in the REPL.
+
 ## MicroPython REPL
 
 The **MicroPython REPL** tab connects to the board over Web Serial: a terminal (xterm.js), interrupt and soft-reset
@@ -36,7 +46,8 @@ The link `#repl` opens that tab directly.
 |---|---|
 | `index.html` | the whole app, one file, no build step |
 | `catalog.json` | MicroPython builds (version, ESP-IDF version, sha256) and the C image URL |
-| `firmware/` | official `ESP32_GENERIC_S3` MicroPython releases from micropython.org |
+| `firmware/` | official `ESP32_GENERIC_S3` MicroPython releases from micropython.org, plus the microlite build |
+| `examples/` | the microlite sine demo and its model |
 | `vendor/` | [esptool-js](https://github.com/espressif/esptool-js) 0.7.1 (Apache-2.0) and [xterm.js](https://xtermjs.org) 5.5.0 (MIT), with licences |
 
 MicroPython images are checked against their sha256 before writing, and the flash is verified with an

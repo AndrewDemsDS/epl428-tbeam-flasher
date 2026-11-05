@@ -338,7 +338,7 @@ function renderInfo() {
   $("mpinfo").textContent =
     `Compatible ESP-IDF: ${e.idf} (this build was made with it; use it if you compile this version yourself). ` +
     `Same IDF also used by: ${same.filter((v) => v !== "v" + e.version).join(", ") || "no other bundled release"}. ` +
-    `${(e.size / 1048576).toFixed(2)} MiB.`;
+    `${(e.size / 1048576).toFixed(2)} MiB.` + (e.note ? ` ${e.note}` : "");
 }
 function selectedMp() { return catalog.micropython.find((x) => x.version === $("mp").value); }
 
